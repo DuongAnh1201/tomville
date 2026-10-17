@@ -38,20 +38,26 @@ Still needed at build time: Python 3.11+ and `uv` (install steps in [Install](#i
 Landscape on an 11-inch tablet, about 140 × 40 cells:
 
 ```
-┌ Tomville · myproject ─────────────────────────────────────────┬ Team ──────────────────────────┐
-│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │ 🐱 claude  lead    working     │
-│ ▓  DESKS              ▓  REVIEW         ▓  DONE              ▓ │ 🐶 codex1  worker  BLOCKED !   │
-│ ▓  ┌──┐  ┌──┐  ┌──┐   ▓  ┌────────┐     ▓  ┌────────┐        ▓ │ 🐑 codex2  worker  idle        │
-│ ▓  └──┘  └──┘  └──┘   ▓  │  T1    │     ▓  │        │        ▓ ├ Board ─────────────────────────┤
-│ ▓  🐱⌨                ▓  └────────┘     ▓  └────────┘        ▓ │ Todo   Doing  Review  Done     │
-│ ▓                     ▓      🐶❗        ▓                    ▓ │ T3     T2     T1              │
-│ ▓        LOUNGE  🛋    ▓                 ▓                    ▓ │               PR #4           │
-│ ▓          🐑 z z      ▓                 ▓                    ▓ ├ Events ────────────────────────┤
-│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │ 10:42 codex1 needs approval    │
-│                                                                │ 10:40 claude assigned T2       │
-└────────────────────────────────────────────────────────────────┴────────────────────────────────┘
- [F]ps 10  [S]prites emoji  [T]heme night  [Tab] next agent  [Enter] open pane  [?] help
+┌ Tom's ville · myproject ────────────────────────────────────────┬ Team ──────────────────────────┐
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │ 🐱 claude  boss    working     │
+│ ▓ ┌ BOARD ───────────────────┐          🐱                      ▓ │ 🐶 codex1  worker  BLOCKED !   │
+│ ▓ │ Todo   Doing   Review    │      ┌──────────┐                ▓ │ 🐑 codex2  worker  idle        │
+│ ▓ │ #14    #12     #9        │      │   BOSS   │                ▓ ├ Events ────────────────────────┤
+│ ▓ │ #15                      │      └──────────┘                ▓ │ 10:42 codex1 needs approval    │
+│ ▓ └──────────────────────────┘                                  ▓ │ 10:40 claude → codex1: #12     │
+│ ▓                                                               ▓ │ 10:40 #12 → Doing (codex1)     │
+│ ▓        ┌────────┐        ┌────────┐        ┌────────┐         ▓ │ 10:31 #9 → Review (codex2)     │
+│ ▓        │ codex1 │        │ codex2 │        │        │         ▓ │                                │
+│ ▓        └────────┘        └────────┘        └────────┘         ▓ │                                │
+│ ▓           🐶❗                                                 ▓ │                                │
+│ ▓                                                               ▓ │                                │
+│ ▓  LOUNGE 🛋  🐑 z z        REVIEW ▭                     DOOR ▯  ▓ │                                │
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │                                │
+└─────────────────────────────────────────────────────────────────┴────────────────────────────────┘
+ [F]ps 10  [S]prites emoji  [G] board check 60s  [Tab] next agent  [Enter] open pane  [?] help
 ```
+
+The boss sits at the top, behind the boss desk, facing the workers. The task board hangs on the wall next to the boss. Each worker has a desk with its name on it, facing the boss. Empty desks wait for new workers.
 
 In portrait, the sidebar moves under the office floor.
 
@@ -74,13 +80,20 @@ herdr has no idea of a "team": any agent can prompt any other. Tomville supports
 
 ### 1. Lead + workers (default)
 
-One lead hands tasks to workers. The office in [What it looks like](#what-it-looks-like) is this shape: the lead sits at the front desk, workers at the desks around it.
+One lead (the **boss**) hands tasks to workers. The office in [What it looks like](#what-it-looks-like) is this shape: the boss at the top behind the boss desk with the board beside it, and a named desk per worker, facing the boss.
 
-| What happens | How Tomville knows | What you see |
-| --- | --- | --- |
-| Lead gives a worker a task | An issue gets `status:doing` and that worker's `agent:` label (or a `doing` row in `TASKS.md`) | Lead pet walks to the worker's desk and hands over a card |
-| Worker finishes | Worker goes `working` → `done` | Worker carries the card to the review zone |
-| Lead reviews | Issue moves to `status:review`, then is closed | Card moves on the board; lead pet visits the review zone |
+The handover, step by step:
+
+| Step | What happens | How Tomville knows | What you see |
+| --- | --- | --- | --- |
+| 1 | Boss puts a task on GitHub for a worker | Issue created or labelled `agent:codex1` (from `tmv task` at once; from elsewhere on the next board check) | Card appears in Todo on the board |
+| 2 | Boss tells the worker | `tmv send codex1 "…"` in the message log | Boss pet stands up, walks to codex1's desk; bubble: "#12 is yours" |
+| 3 | Worker checks the board | Worker reads GitHub Issues (or `TASKS.md`) | Boss walks back; worker bubble: "checking issues…" |
+| 4 | Worker takes it | `tmv task take 12`: `status:doing` | Card moves to Doing; bubble: "on it: #12"; worker types |
+| 5 | Worker finishes | Worker `done`; issue `status:review` | Worker walks to the boss desk; bubble: "#12 ready for review"; card to Review |
+| 6 | Boss reviews and closes | Issue closed (`Fixes #12`) | Card to Done; boss bubble: "merged ✓" |
+
+Changes made through `tmv task` and `tmv send` move pets at once, because Tomville logs them locally. Changes made elsewhere (the GitHub website or app) show up on the next board check.
 
 ### 2. Pipeline
 
@@ -416,7 +429,8 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `send AGENT TEXT` | Prompt another agent and log who sent it (see [Who talks to whom](#who-talks-to-whom)). For agents to use instead of `herdr agent prompt` | `--wait`, `--timeout MS` (passed to herdr) |
 | `status` | Print the team and board once, then exit. Like `claude -p`: no app opens | `--json`, `--watch [SEC]` (reprint every N s), `--agent NAME` |
 | `doctor` | Check the setup and print fixes | `--json` |
-| `setup` | Calibrate emoji width and write settings with a pet per running agent | `--yes` (accept defaults, no questions), `--style`, `--theme` |
+| `new [NAME]` | Create a new ville for this project: name, team shape, agents, pets, board, emoji check. Saved in `.tomville/ville.toml`. Bare `tomville` offers this when the project has no ville yet | `--yes` (accept defaults) |
+| `setup` | Redo parts of setup for this ville: emoji calibration, labels, agent rules, hook | `--yes` (accept defaults, no questions), `--style`, `--theme` |
 | `pets list` | Show every pet, animated | `--style` |
 | `pets show NAME` | Show one pet's frames and palette | `--style`, `--fps` |
 | `pets new NAME` | Create a pet file to edit | `--from cat` (copy a built-in), `--size 2x3` (tiles × rows) |
@@ -657,6 +671,8 @@ Rules for phase 1 that keep phase 3 easy:
 ## Decided
 
 - Name: Tomville. Command `tomville`, short alias `tmv`; settings in `~/.config/tomville/`.
+- First run: the user creates a new ville (`tmv new`), like starting a new game. One ville per project.
+- Lead + workers layout: boss at the top behind the boss desk, facing named worker desks; the board on the wall beside the boss.
 - The task board is GitHub Issues by default, checked every `check_seconds` (user's choice); `TASKS.md` is the offline plug-in.
 - Messages are logged by Tomville (`tmv send` + Claude Code hook), because herdr does not record senders.
 - Status comes from herdr's event stream, with polling as a fallback.

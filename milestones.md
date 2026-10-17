@@ -46,7 +46,7 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 - [ ] `uv tool install --editable .` puts both commands on `PATH`
 - [ ] `tomville --version` and `tmv --help` work
 - [ ] Textual layout: office floor, Team, Board, Events panels, key bar
-- [ ] Office map drawn (desks, review zone, done zone, lounge, door)
+- [ ] Lead + workers office map: boss desk at the top with the board on the wall beside it, named worker desks facing the boss, lounge, review zone, door
 - [ ] Landscape and portrait layouts
 - [ ] `pytest` set up with one passing test
 
@@ -75,10 +75,12 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 - [ ] Frame rate option and `F` key (5/10/15/30)
 - [ ] Team-shape interface in the world model, so Part 2 shapes plug in without changing the core
 - [ ] Lead + workers shape: lead at the front desk; `[team] lead` setting
-- [ ] Task handover when an issue gets `status:doing` and a worker's `agent:` label (or a `doing` row in `TASKS.md`)
+- [ ] Handover as in [idea.md](idea.md#lead--workers-layout): boss walks to the worker's desk, bubble "#12 is yours", worker "checking issues…", then "on it: #12" when it takes the issue (or a `doing` row in `TASKS.md`)
+- [ ] Conversation bubbles: show for a few seconds, never cover another pet's name
+- [ ] Done: worker walks to the boss desk, bubble "#12 ready for review"
 - [ ] Unit tests for the world model with fake events
 
-**Check:** start Claude or Codex: its pet walks to a desk; a `blocked` agent jumps with `❗`; an agent that exits walks out the door.
+**Check:** start Claude or Codex: its pet walks to its named desk; a `blocked` agent jumps with `❗`; an agent that exits walks out the door. Label an issue `agent:codex1`: the boss walks to codex1's desk and the bubbles appear in order.
 
 ## M4 · Sprites
 
@@ -105,7 +107,9 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 - [ ] All office options from the README, with settings order: options > env vars > `settings.toml` > defaults
 - [ ] `status` (`--json`, `--watch`, `--agent`), `doctor` (checks `gh` login and board labels), `config` (`path`, `show`, `get`, `set`)
 - [ ] `task new`, `task take`, `task move`, `task list`, calling `gh` underneath
-- [ ] `setup`: writes settings with a pet per running agent, creates board labels, adds the `tmv send` and `tmv task` rules to `CLAUDE.md`/`AGENTS.md`, installs the Claude hook
+- [ ] `new [NAME]`: create-a-ville wizard (name, shape, agents, pets, board, check interval, emoji test) → `.tomville/ville.toml`; creates board labels, adds the `tmv send` and `tmv task` rules to `CLAUDE.md`/`AGENTS.md`, installs the Claude hook
+- [ ] Bare `tomville` in a project with no ville offers `tmv new`
+- [ ] `setup`: redo calibration, labels, rules or hook for an existing ville
 - [ ] Exit codes as in the README; `--no-color` / `NO_COLOR`
 
 **Check:** `tmv status --json` and `tmv doctor` give correct output; `tmv task take 12` moves card #12 to Doing on the next check; `--help` lists every option.
@@ -116,7 +120,7 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 - [ ] `?` help screen; `B` full-screen board
 - [ ] `uv tool install git+https://github.com/DuongAnh1201/tomville` works on a fresh setup
 
-**Check:** fresh install → `tmv setup` → `tmv` shows the real team in both shapes, end to end.
+**Check:** fresh install → `tmv new` → `tmv` shows the real team in both shapes, end to end.
 
 **Part 1 done:** ______
 
@@ -205,6 +209,7 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-17: First run is "create a new ville" (`tmv new`, saved in `.tomville/ville.toml`). Lead + workers layout designed: boss on top with the board, named worker desks facing it, handover with bubbles (M1, M3, M6).
 - 2026-10-17: Pixel-art pets from online sets (`pets import`, big mode, pet gallery) saved as a later update in [idea.md](idea.md#later-updates); not in any milestone. Pets stay built-in for now.
 - 2026-10-17: GitHub Issues is the main board (plug-in, `TASKS.md` as the alternative); user-chosen `check_seconds`; `tmv task` commands; agent rules 8 and 9.
 

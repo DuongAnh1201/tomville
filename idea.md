@@ -94,6 +94,45 @@ herdr has no chat channel, shared memory or task list. Agents use each other's t
 
 herdr sets `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID` and `HERDR_PANE_ID` in every pane, so a command knows which pane it runs in.
 
+## User journey
+
+1. **Install**: `uv tool install git+https://github.com/DuongAnh1201/tomville` (later the one-line `install.sh`).
+2. **Create a new ville**: like starting a new game. Inside herdr, in the project folder, run `tmv new` (or just `tomville`, which offers it when the project has no ville). It asks:
+   - the ville's name (e.g. "Tom's ville"), shown in the title bar
+   - team shape: lead + workers, or pipeline
+   - the agents: boss `claude`; workers `codex1`, `codex2` (or pipeline stages)
+   - a pet for each (built-in cat, dog, sheep, …)
+   - the board: GitHub repo (from `git remote`) or `TASKS.md`, and how often to check it
+   - the emoji test row (falls back to ASCII if it doesn't line up)
+
+   Then it saves `.tomville/ville.toml` in the project, creates the GitHub labels, adds the `tmv send` / `tmv task` rules to `CLAUDE.md` / `AGENTS.md`, and installs the Claude hook.
+3. **Start the agents** in herdr panes; `tmv doctor` lists who is missing and the command to start them.
+4. **Open the ville**: `tmv` in its own herdr tab.
+5. **Give prompts**: select the boss (`Tab`), `Enter` to jump to its pane, and give it the goal. The boss creates issues and hands them out; you only talk to the boss. For a pipeline, prompt the first stage.
+6. **Watch**: `❗` = needs approval (`Enter` to go there), pets at the boss desk = ready for review, closed issues drop into Done.
+
+## Lead + workers layout
+
+Designed by Tom, 2026-10-17. (Pipeline layout: the conveyor belt in the README, not designed in detail yet.)
+
+```
+ ┌ BOARD ───────────────┐           🐱
+ │ Todo   Doing  Review │      ┌──────────┐
+ │ #14    #12    #9     │      │   BOSS   │
+ └──────────────────────┘      └──────────┘
+
+      ┌────────┐       ┌────────┐       ┌────────┐
+      │ codex1 │       │ codex2 │       │        │
+      └────────┘       └────────┘       └────────┘
+          🐶               🐑
+```
+
+- **Boss on top**, behind the boss desk, facing the workers. The **board** hangs on the wall next to the boss.
+- **One desk per worker**, with the worker's name on it, opposite the boss. Empty desks wait for new workers.
+- **The handover**: the boss pushes a task to GitHub (an issue for that worker) → the boss pet walks to that worker's desk → a conversation bubble pops up ("#12 is yours") → the boss walks back and the worker checks the GitHub issues (or `TASKS.md`), bubble "checking issues…" → it takes the task, the card moves to Doing, bubble "on it: #12", and it types.
+- **Done**: the worker walks to the boss desk ("#12 ready for review"); when the issue closes, the card drops into Done.
+- Changes made through `tmv task` / `tmv send` move pets at once (logged locally); changes on the GitHub website or app show up on the next board check.
+
 ## Team shapes
 
 Any agent can prompt any other, so the team shape is up to us. v1 draws two:
@@ -111,7 +150,7 @@ Decided 2026-10-17: **GitHub Issues is the main board from the start.** We compa
 - **Check interval**: `[board] check_seconds` (default 60, minimum 10), `--board-check SEC`, or the `G` key in the app. Lower moves cards sooner; higher saves battery and network.
 - Each check is one API call with `ETag`: an unchanged board returns `304` and doesn't use rate limit. Offline, the board keeps its last cards and shows `offline since …`.
 - Agents use `tmv task new/take/move/list`, which call `gh` underneath, instead of long `gh issue edit … --add-label …` commands. Fewer tokens and fewer mistakes.
-- `tmv setup` creates the labels and adds the board rules to `CLAUDE.md` / `AGENTS.md`.
+- `tmv new` (and `tmv setup` later) creates the labels and adds the board rules to `CLAUDE.md` / `AGENTS.md`.
 - **Plug-in**: the board source is swappable like team shapes. `source = "github"` (default) or `"tasks-md"` for offline or quick projects. The office looks the same either way.
 - Bugs and ideas outside the current milestone also go to Issues (label `bug` or `idea`), so agents stay on task.
 
