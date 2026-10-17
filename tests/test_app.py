@@ -208,3 +208,57 @@ def test_short_screen_keeps_latest_events_visible_and_board_scrollable(tmp_path)
             assert board.scroll_y > 0
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('size', [(40, 16), (60, 20), (80, 24), (100, 30), (148, 44), (200, 60), (50, 70), (70, 90)])
+def test_layout_size_matrix_and_sidebar_toggle(tmp_path, size):
+    from tomville.core.settings import OfficeSettings
+    from tomville.tui.app import EventsPanel
+
+    async def run():
+        app = TomvilleApp(project=tmp_path, settings=OfficeSettings(demo=True), live=False)
+        async with app.run_test(size=size) as pilot:
+            await pilot.pause()
+            office = app.query_one(OfficeView)
+            sidebar = app.query_one('#sidebar')
+            assert app.query_one('#main').has_class('portrait') == (size[1] * 2 > size[0])
+            assert office.size.width >= 30 and office.size.height >= 10
+            if sidebar.display:
+                assert app.query_one(EventsPanel).content_size.height >= 4
+                if size[1] * 2 > size[0]:
+                    assert office.size.height >= (size[1] - 2) * 2 / 3
+            shown = sidebar.display
+            await pilot.press('t')
+            assert sidebar.display != shown
+            if sidebar.display:
+                assert app.query_one(EventsPanel).content_size.height >= 4
+                assert sidebar.region.x >= 0 and sidebar.region.right <= size[0]
+            assert office.size.width >= 30 and office.size.height >= 10
+            await pilot.press('t')
+            assert sidebar.display == shown
+
+    asyncio.run(run())
+
+
+def test_layout_resize_and_forced_orientation(tmp_path):
+    from tomville.core.settings import OfficeSettings
+
+    async def run():
+        app = TomvilleApp(project=tmp_path, settings=OfficeSettings(), live=False)
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            assert not app.query_one('#main').has_class('portrait')
+            await pilot.resize_terminal(50, 70)
+            assert app.query_one('#main').has_class('portrait')
+            await pilot.resize_terminal(40, 16)
+            assert not app.query_one('#sidebar').display
+            await pilot.resize_terminal(148, 44)
+            assert app.query_one('#sidebar').display
+            app.settings.layout = 'portrait'
+            app._apply_layout(148, 44)
+            assert app.query_one('#main').has_class('portrait')
+            app.settings.layout = 'landscape'
+            await pilot.resize_terminal(50, 70)
+            assert not app.query_one('#main').has_class('portrait')
+
+    asyncio.run(run())
