@@ -67,6 +67,15 @@ def build_parser():
     send.add_argument('--timeout', type=int, metavar='MS', help='give up after MS milliseconds (passed to herdr)')
     hook = commands.add_parser('hook', help=argparse.SUPPRESS)
     hook.add_argument('name', choices=('claude-pre-tool-use',))
+    new = commands.add_parser('new', help='create a new ville for this project')
+    common_options(new)
+    new.add_argument('name', nargs='?', help='name of the ville')
+    new.add_argument('--yes', action='store_true', help='accept the defaults, no questions')
+    new.add_argument('--claude-settings', type=Path, metavar='FILE', help='Claude Code settings.json for the hook (default: ~/.claude/settings.json)')
+    setup = commands.add_parser('setup', help='redo emoji test, labels, agent rules or the Claude hook')
+    common_options(setup)
+    setup.add_argument('--yes', action='store_true', help='redo labels, rules and hook without asking; skip the emoji test unless --style is given')
+    setup.add_argument('--claude-settings', type=Path, metavar='FILE', help='Claude Code settings.json for the hook (default: ~/.claude/settings.json)')
     task = commands.add_parser('task', help='manage GitHub task cards')
     common_options(task)
     tasks = task.add_subparsers(dest='task_command', required=True)
@@ -169,6 +178,55 @@ def task_command(args, project, settings):
     return 0
 
 
+def prompt(question, default):
+    return input(f'{question} [{default}]: ').strip() or default
+
+
+def confirm(question):
+    return prompt(question + ' (yes/no)', 'yes').lower().startswith('y')
+
+
+def new_command(args, project):
+    from tomville.core import ville
+
+    if ville.has_ville(project):
+        raise ValueError('this project already has a ville; run `tmv setup` to redo parts of it')
+    ask = (lambda question, default: default) if args.yes else prompt
+    answers = ville.ask_answers(project, args.name, ask)
+    print(f'Saved {ville.write_ville(project, answers.data())}')
+    settings = load_settings(project, config=args.config)
+    failed = ville.run_steps(project, settings, ville.STEPS, args.claude_settings or ville.claude_settings_path())
+    print('Next: start the agents in herdr panes (`tmv doctor` lists what is missing), then run `tmv` in its own tab.')
+    return int(failed > 0)
+
+
+def setup_command(args, project, settings):
+    from tomville.core import ville
+
+    if not ville.has_ville(project):
+        raise ValueError('no ville in this project; run `tmv new` first')
+    updates = {key: getattr(args, key) for key in ('style', 'theme') if hasattr(args, key)}
+    if 'style' not in updates and not args.yes and confirm('Redo the emoji test?'):
+        updates['style'] = ville.calibrate(prompt)
+    if updates:
+        print(f'Saved {ville.update_ville(project, updates)}: ' + ', '.join(f'{k} = {v}' for k, v in updates.items()))
+    steps = [step for step in ville.STEPS if args.yes or confirm(f'Redo {step}?')]
+    return int(ville.run_steps(project, settings, steps, args.claude_settings or ville.claude_settings_path()) > 0)
+
+
+def offer_new(args, project, settings):
+    """Bare `tomville` in a project with no ville: offer `tmv new`. True if it created one."""
+    from tomville.core.ville import has_ville
+
+    if settings.demo or has_ville(project) or not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return False
+    if not confirm('No ville in this project yet. Create one now with `tmv new`?'):
+        return False
+    args.name, args.yes, args.claude_settings = None, False, None
+    new_command(args, project)
+    return True
+
+
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -203,11 +261,17 @@ def main(argv=None):
             return int(result['problems'] > 0)
         if args.command == 'task':
             return task_command(args, project, settings)
+        if args.command == 'new':
+            return new_command(args, project)
+        if args.command == 'setup':
+            return setup_command(args, project, settings)
         if args.command == 'send':
             from tomville.core.messages import repo_root, send
             result = send(repo_root(project), args.agent, ' '.join(args.text), args.wait, args.timeout)
             output({'sent': args.agent, 'herdr': result}, args, f'sent to {args.agent}')
             return 0
+        if args.command is None and offer_new(args, project, settings):
+            settings = load_settings(project, config=args.config)
         from tomville.tui.app import TomvilleApp
         previous_no_color = os.environ.get('NO_COLOR')
         if args.no_color:
@@ -223,6 +287,9 @@ def main(argv=None):
         return 0
     except KeyboardInterrupt:
         return 0
+    except EOFError:
+        print('tomville: cancelled', file=sys.stderr)
+        return 1
     except (ValueError, TypeError, KeyError) as exc:
         if args.json:
             output({'error': str(exc)}, args)

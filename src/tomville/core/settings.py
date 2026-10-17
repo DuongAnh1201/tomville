@@ -25,6 +25,7 @@ def load_reader_settings(project, *, config=None, source=None, check_seconds=Non
 
 @dataclass
 class OfficeSettings(ReaderSettings):
+    name: str = ''
     fps: int = 10
     style: str = 'emoji'
     theme: str = 'night'
@@ -82,8 +83,10 @@ def settings_from_data(data):
         raise ValueError('team.stages must be an array of names')
     if team.get('lead') is not None and not isinstance(team['lead'], str):
         raise ValueError('team.lead must be a name')
+    if not isinstance(data.get('name', ''), str):
+        raise ValueError('name must be text')
     return OfficeSettings(
-        source=board.get('source', 'github'), repo=board.get('repo', ''),
+        name=data.get('name', ''), source=board.get('source', 'github'), repo=board.get('repo', ''),
         check_seconds=float(board.get('check_seconds', 60)), poll_seconds=float(data.get('poll_seconds', 1)),
         fps=data.get('fps', 10), style=data.get('style', 'emoji'), theme=data.get('theme', 'night'),
         layout=data.get('layout', 'auto'), team=team.get('shape', 'lead'), lead=team.get('lead'),

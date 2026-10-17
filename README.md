@@ -443,8 +443,8 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `send AGENT TEXT` | Prompt another agent and log who sent it (see [Who talks to whom](#who-talks-to-whom)). For agents to use instead of `herdr agent prompt` | `--wait`, `--timeout MS` (passed to herdr) |
 | `status` | Print the team and board once, then exit. Like `claude -p`: no app opens | `--json`, `--watch [SEC]` (reprint every N s), `--agent NAME` |
 | `doctor` | Check the setup and print fixes | `--json` |
-| `new [NAME]` | Create a new ville for this project: name, team shape, agents, pets, board, emoji check. Saved in `.tomville/ville.toml`. Bare `tomville` offers this when the project has no ville yet | `--yes` (accept defaults) |
-| `setup` | Redo parts of setup for this ville: emoji calibration, labels, agent rules, hook | `--yes` (accept defaults, no questions), `--style`, `--theme` |
+| `new [NAME]` | Create a new ville for this project: name, team shape, agents, pets, board, emoji check. Saved in `.tomville/ville.toml`. Bare `tomville` offers this when the project has no ville yet | `--yes` (accept defaults), `--claude-settings FILE` (hook file, default `~/.claude/settings.json`) |
+| `setup` | Redo parts of setup for this ville: emoji calibration, labels, agent rules, hook | `--yes` (no questions; skips the emoji test unless `--style` is given), `--style`, `--theme`, `--claude-settings FILE` |
 | `pets list` | Show every pet, animated | `--style` |
 | `pets show NAME` | Show one pet's frames and palette | `--style`, `--fps` |
 | `pets new NAME` | Create a pet file to edit | `--from cat` (copy a built-in), `--size 2x3` (tiles × rows) |

@@ -88,6 +88,7 @@ class TomvilleApp(App):
         self.project = (project or Path.cwd()).resolve()
         self.ville = ville
         self.settings = settings or load_settings(self.project)
+        self.ville = getattr(self.settings, 'name', '') or ville
         self.reader = EventReader(self.project, self.settings)
         self.reader.snapshot = self.load_snapshot
         self.live = live
