@@ -46,6 +46,24 @@ class EventReader:
         self.cards = {}
         self.offline_since = None
         self.board_wake = asyncio.Event()
+        # Optional: called as snapshot(agents, cards) once each source has read its
+        # first state. That first state is not emitted as events (no "appeared" or
+        # "changed" for everything that already existed).
+        self.snapshot = None
+        self._started = set()
+
+    def _emit(self, source, events, emit):
+        """Emit events; the first pass of a source goes to `snapshot` instead."""
+        if self.snapshot is None or source in self._started:
+            for event in events:
+                emit(event)
+            return
+        self._started.add(source)
+        kinds = (AgentAppeared, AgentLeft, AgentStatusChanged) if source == 'agents' else (CardChanged, CardRemoved)
+        for event in events:
+            if not isinstance(event, kinds):
+                emit(event)
+        self.snapshot(list(self.agents.values()), list(self.cards.values()))
 
     def update_agents(self, agents):
         current = {a.pane_id: a for a in agents}
@@ -79,8 +97,11 @@ class EventReader:
 
     async def _agents(self, emit):
         async def refresh():
-            for event in self.update_agents(await agent_list()):
-                emit(event)
+            events = []
+            try:
+                events = self.update_agents(await agent_list())
+            finally:
+                self._emit('agents', events, emit)
 
         while True:
             writer = None
@@ -134,8 +155,7 @@ class EventReader:
     async def _board(self, emit):
         while True:
             self.board_wake.clear()
-            for event in await asyncio.to_thread(self.update_board):
-                emit(event)
+            self._emit('board', await asyncio.to_thread(self.update_board), emit)
             interval = self.settings.poll_seconds if self.board.name == 'tasks-md' else self.settings.check_seconds
             try:
                 await asyncio.wait_for(self.board_wake.wait(), interval)

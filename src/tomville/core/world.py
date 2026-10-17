@@ -1,0 +1,470 @@
+"""The world model: where each pet is, where it is going and what it says.
+
+It turns events into targets and moves pets cell by cell around walls. It draws
+nothing and never calls herdr or GitHub, so it runs with fake events in tests.
+Speed is in cells per second, so changing the frame rate never changes how fast
+pets walk. What a team shape adds on top (the lead's handover, "ready for
+review") lives in a `Play`, one per shape, see `core/shapes/lead_play.py`.
+"""
+
+from __future__ import annotations
+
+import random
+from collections import deque
+from dataclasses import dataclass, field
+from typing import Protocol
+
+from tomville.core.models import (
+    Agent,
+    AgentAppeared,
+    AgentLeft,
+    AgentStatusChanged,
+    Card,
+    CardChanged,
+    CardRemoved,
+    Column,
+    Event,
+    Status,
+)
+from tomville.core.script import Step
+from tomville.core.shapes import PLAYS, LeadShape, OfficeMap, Rect, TeamShape
+from tomville.core.shapes.base import WALL
+
+Cell = tuple[int, int]
+
+WALK_SPEED = 8.0  # cells per second
+WANDER_SPEED = 1.5
+BUBBLE_SECONDS = 3.0
+SLEEP_AFTER = 60.0  # seconds idle before a pet sleeps
+BLINK_HZ = 2.0
+MAX_BUBBLE = 28  # characters
+
+
+@dataclass
+class Pet:
+    name: str
+    kind: str
+    status: Status
+    x: float
+    y: float
+    path: list[Cell] = field(default_factory=list)
+    speed: float = WALK_SPEED
+    home: Cell | None = None  # where the status sends it; None = stay put
+    leaving: bool = False
+    script: list[Step] = field(default_factory=list)
+    bubbles: list[list] = field(default_factory=list)  # [text, seconds left]; first shows
+    idle_for: float = 0.0
+    wander_in: float = 2.0
+
+    @property
+    def cell(self) -> Cell:
+        return round(self.x), round(self.y)
+
+    @property
+    def sleeping(self) -> bool:
+        return self.status is Status.IDLE and self.idle_for >= SLEEP_AFTER and not self.path
+
+
+@dataclass(frozen=True)
+class Appearance:
+    """What the renderer needs for one pet this frame."""
+
+    name: str
+    kind: str
+    status: Status
+    x: int
+    y: int  # already includes the jump of a blocked pet
+    mark: str  # shown after the name: "❗", "?", "z z", a task id, or ""
+    bubble: str | None
+
+    @property
+    def label(self) -> str:
+        return f"{self.name} {self.mark}" if self.mark else self.name
+
+
+class Play(Protocol):
+    """What a team shape adds to the world. Both hooks may start scripts."""
+
+    def on_status(self, world: World, pet: Pet, old: Status, new: Status) -> None: ...
+
+    def on_card(self, world: World, card: Card, prev: Card | None) -> None: ...
+
+
+class NullPlay:
+    def on_status(self, world, pet, old, new) -> None:
+        pass
+
+    def on_card(self, world, card, prev) -> None:
+        pass
+
+
+class World:
+    def __init__(
+        self,
+        shape: TeamShape | None = None,
+        lead: str | None = "claude",
+        rng: random.Random | None = None,
+    ) -> None:
+        self.shape = shape or LeadShape()
+        self.lead = lead
+        self.rng = rng or random.Random()
+        play = PLAYS.get(self.shape.name)
+        self.play: Play = play() if play else NullPlay()
+        self.pets: dict[str, Pet] = {}
+        self.cards: dict[str, Card] = {}
+        self.office: OfficeMap | None = None
+        self.size: Cell = (0, 0)
+        self.time = 0.0
+        self._blocked: set[Cell] = set()
+        self._workers: list[str] = []
+
+    # --- setup and events -------------------------------------------------
+
+    def resize(self, width: int, height: int) -> None:
+        """Draw the office at a new size; pets jump to where they belong."""
+        if (width, height) == self.size and self.office is not None:
+            return
+        self.size = (width, height)
+        self._relayout(snap=True)
+
+    def load(self, agents: list[Agent], cards: list[Card]) -> None:
+        """Start-up state: pets start at their places, no handovers for old cards.
+
+        Can be called once per source (agents, then cards): it only adds what is
+        missing and never moves a pet that is already here.
+        """
+        self.cards.update({c.id: c for c in cards})
+        fresh = [a for a in agents if a.name not in self.pets]
+        for agent in fresh:
+            self.pets[agent.name] = self._new_pet(agent)
+        if fresh:
+            self._relayout(snap=True)
+
+    def apply(self, event: Event) -> None:
+        if isinstance(event, AgentAppeared):
+            self._appeared(event.agent)
+        elif isinstance(event, AgentStatusChanged):
+            self._status_changed(event)
+        elif isinstance(event, AgentLeft):
+            self._left(event.name)
+        elif isinstance(event, CardChanged):
+            prev = self.cards.get(event.card.id)
+            self.cards[event.card.id] = event.card
+            self.play.on_card(self, event.card, prev)
+        elif isinstance(event, CardRemoved):
+            self.cards.pop(event.id, None)
+
+    def _appeared(self, agent: Agent) -> None:
+        if agent.name in self.pets:
+            return
+        door = self._door_cell()
+        pet = self._new_pet(agent)
+        if door:
+            pet.x, pet.y = door
+        self.pets[agent.name] = pet
+        self._relayout(snap=False)
+
+    def _status_changed(self, event: AgentStatusChanged) -> None:
+        pet = self.pets.get(event.name)
+        if pet is None or pet.leaving:
+            return
+        pet.status = event.new
+        pet.idle_for = 0.0
+        if not self.is_lead(pet):
+            pet.script.clear()
+        self._retarget(pet, force=True)
+        self.play.on_status(self, pet, event.old, event.new)
+
+    def _left(self, name: str) -> None:
+        pet = self.pets.get(name)
+        if pet is None or pet.leaving:
+            return
+        pet.leaving = True
+        pet.script.clear()
+        door = self._door_cell()
+        if door is None or not self._walk(pet, door):
+            del self.pets[name]
+        else:
+            self._relayout(snap=False)
+
+    def _new_pet(self, agent: Agent) -> Pet:
+        return Pet(agent.name, agent.kind, agent.status, 0.0, 0.0)
+
+    # --- queries ----------------------------------------------------------
+
+    def is_lead(self, pet: Pet) -> bool:
+        return pet.name == self.lead
+
+    def task_of(self, name: str) -> str | None:
+        """The id of the card this agent is working on, if any."""
+        for card in self.cards.values():
+            if card.agent == name and card.column is Column.DOING:
+                return card.id
+        return None
+
+    def appearances(self) -> list[Appearance]:
+        return [self.appearance(p) for p in self.pets.values()]
+
+    def appearance(self, pet: Pet) -> Appearance:
+        x, y = pet.cell
+        mark = ""
+        if pet.status is Status.BLOCKED:
+            blink_on = int(self.time * BLINK_HZ * 2) % 2 == 0
+            if blink_on:
+                mark = "❗"
+            if int(self.time * BLINK_HZ) % 2 == 0:
+                y = max(1, y - 1)  # the jump
+        elif pet.status is Status.UNKNOWN:
+            mark = "?"
+        elif pet.sleeping:
+            mark = "z z"
+        elif pet.status is Status.WORKING:
+            mark = self.task_of(pet.name) or ""
+        bubble = pet.bubbles[0][0] if pet.bubbles else None
+        return Appearance(pet.name, pet.kind, pet.status, x, y, mark, bubble)
+
+    def bubble_rect(self, name: str) -> Rect | None:
+        """Where `name`'s bubble goes: inside the office, over no pet and no name."""
+        pet = self.pets.get(name)
+        if pet is None or not pet.bubbles or self.office is None:
+            return None
+        apps = self.appearances()
+        me = next(a for a in apps if a.name == name)
+        taken = [Rect(a.x, a.y, 1, 1) for a in apps]
+        taken += [_label_rect(a) for a in apps if a.name != name]
+        taken.append(_label_rect(me))
+        text = f" {me.bubble[:MAX_BUBBLE]} "
+        w, o = len(text), self.office
+        for dy in (-1, -2, -3, 0, 1, 2, 3):
+            for x0 in (me.x - w // 2, me.x - w, me.x + 1):
+                x0 = max(1, min(x0, o.width - 1 - w))
+                r = Rect(x0, me.y + dy, w, 1)
+                if r.y < 1 or r.y > o.height - 2:
+                    continue
+                if not any(_overlap(r, t) for t in taken):
+                    return r
+        return None
+
+    # --- time -------------------------------------------------------------
+
+    def tick(self, dt: float) -> None:
+        self.time += dt
+        for pet in list(self.pets.values()):
+            self._bubble_time(pet, dt)
+            self._move(pet, dt)
+            if pet.leaving and not pet.path:
+                del self.pets[pet.name]
+                self._relayout(snap=False)
+                continue
+            self._run_script(pet)
+            self._idle(pet, dt)
+
+    def _bubble_time(self, pet: Pet, dt: float) -> None:
+        if pet.bubbles:
+            pet.bubbles[0][1] -= dt
+            if pet.bubbles[0][1] <= 0:
+                pet.bubbles.pop(0)
+
+    def _move(self, pet: Pet, dt: float) -> None:
+        budget = pet.speed * dt
+        while budget > 0 and pet.path:
+            tx, ty = pet.path[0]
+            dx, dy = tx - pet.x, ty - pet.y
+            dist = abs(dx) + abs(dy)
+            if dist <= budget:
+                pet.x, pet.y = tx, ty
+                pet.path.pop(0)
+                budget -= dist
+            else:
+                pet.x += dx / dist * budget
+                pet.y += dy / dist * budget
+                budget = 0
+
+    def _run_script(self, pet: Pet) -> None:
+        had = bool(pet.script)
+        while pet.script:
+            step = pet.script[0]
+            if step.kind == "walk":
+                if not step.started:
+                    step.started = True
+                    if not self._walk(pet, step.arg):
+                        pet.script.pop(0)
+                        continue
+                    if pet.path:
+                        return
+                elif pet.path:
+                    return
+            elif step.kind == "say":
+                self.say(pet.name, step.arg)
+            elif step.kind == "wait":
+                if pet.bubbles:
+                    return
+            elif step.kind == "call":
+                step.arg()
+            pet.script.pop(0)
+        if had:
+            self._retarget(pet, force=True)
+
+    def _idle(self, pet: Pet, dt: float) -> None:
+        if pet.status is not Status.IDLE or pet.script or pet.leaving:
+            return
+        pet.idle_for += dt
+        if pet.path:
+            return
+        lounge = self.office.zones.get("lounge") if self.office else None
+        if self.is_lead(pet) or lounge is None or pet.sleeping:
+            return
+        pet.wander_in -= dt
+        if pet.wander_in <= 0:
+            pet.wander_in = self.rng.uniform(2.0, 5.0)
+            cell = (
+                self.rng.randrange(lounge.x, lounge.x + lounge.w),
+                self.rng.randrange(lounge.y, lounge.y + lounge.h),
+            )
+            if self._walk(pet, cell):
+                pet.speed = WANDER_SPEED
+
+    def say(self, name: str, text: str) -> None:
+        """Queue a bubble: they show one after another, a few seconds each."""
+        pet = self.pets.get(name)
+        if pet is not None:
+            pet.bubbles.append([text, BUBBLE_SECONDS])
+
+    def run(self, name: str, steps: list[Step]) -> None:
+        """Give a pet a script; it takes over from the status until it ends."""
+        pet = self.pets.get(name)
+        if pet is not None and not pet.leaving:
+            pet.script.extend(steps)
+
+    # --- places and paths -------------------------------------------------
+
+    def _relayout(self, snap: bool) -> None:
+        width, height = self.size
+        if width <= 0 or height <= 0:
+            return
+        workers = [n for n, p in self.pets.items() if n != self.lead and not p.leaving]
+        if not snap and self.office is not None and workers == self._workers:
+            for pet in self.pets.values():
+                self._retarget(pet)
+            return
+        self._workers = workers
+        self.office = self.shape.layout(width, height, self.lead, workers)
+        self._blocked = _blocked_cells(self.office)
+        for pet in self.pets.values():
+            pet.home = None
+            if snap:
+                pet.path.clear()
+                pet.script.clear()
+                home = self._home(pet)
+                if home:
+                    pet.x, pet.y = home
+                elif pet.cell in self._blocked or not self._inside(pet.cell):
+                    pet.x, pet.y = self._door_cell() or (1, 1)
+            self._retarget(pet)
+
+    def _inside(self, cell: Cell) -> bool:
+        return 0 <= cell[0] < self.size[0] and 0 <= cell[1] < self.size[1]
+
+    def _door_cell(self) -> Cell | None:
+        door = self.office.zones.get("door") if self.office else None
+        return (door.x, door.y) if door else None
+
+    def _zone_of(self, pet: Pet) -> str | None:
+        if self.is_lead(pet) or pet.leaving:
+            return None
+        if pet.status is Status.IDLE:
+            return "lounge"
+        if pet.status is Status.DONE:
+            return "review"
+        if pet.status is Status.WORKING and pet.name not in self.office.seats:
+            return "lounge"  # no desk for it
+        return None
+
+    def _home(self, pet: Pet) -> Cell | None:
+        o = self.office
+        if o is None or pet.leaving:
+            return None
+        zone = self._zone_of(pet)
+        if zone:
+            rect = o.zones.get(zone)
+            if rect is None:
+                return None
+            index = 0
+            for p in self.pets.values():
+                if p is pet:
+                    break
+                index += self._zone_of(p) == zone
+            cols = max(1, rect.w // 3)
+            return rect.x + (index % cols) * 3 + 1, rect.y + (index // cols) % rect.h
+        if self.is_lead(pet) or pet.status is Status.WORKING:
+            return o.seats.get(pet.name)
+        return None  # blocked and unknown stay where they are
+
+    def _retarget(self, pet: Pet, force: bool = False) -> None:
+        if pet.script or pet.leaving:
+            return
+        home = self._home(pet)
+        if home is None or (home == pet.home and not force):
+            return
+        pet.home = home
+        if home != pet.cell or pet.path:
+            self._walk(pet, home)
+
+    def _walk(self, pet: Pet, goal: Cell) -> bool:
+        """Set the pet's path to `goal`; False if there is no way there."""
+        path = self._find_path(pet.cell, goal)
+        if path is None:
+            return False
+        # Start with the cell it is leaving, so a pet between cells stays on the grid.
+        pet.path = ([pet.cell] if (pet.x, pet.y) != pet.cell else []) + path
+        pet.speed = WALK_SPEED
+        return True
+
+    def _find_path(self, start: Cell, goal: Cell) -> list[Cell] | None:
+        """Shortest walk around walls and desks (4 directions), without `start`."""
+        if goal in self._blocked or not self._inside(goal):
+            return None
+        prev: dict[Cell, Cell | None] = {start: None}
+        queue = deque([start])
+        while queue:
+            cell = queue.popleft()
+            if cell == goal:
+                break
+            x, y = cell
+            for nxt in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if nxt not in prev and nxt not in self._blocked and self._inside(nxt):
+                    prev[nxt] = cell
+                    queue.append(nxt)
+        if goal not in prev:
+            return None
+        path: list[Cell] = []
+        cell = goal
+        while cell != start:
+            path.append(cell)
+            cell = prev[cell]
+        return path[::-1]
+
+
+def _blocked_cells(office: OfficeMap) -> set[Cell]:
+    blocked = {
+        (x, y) for y, row in enumerate(office.rows) for x, ch in enumerate(row) if ch == WALL
+    }
+    rects = list(office.desks.values())
+    if "board" in office.zones:
+        rects.append(office.zones["board"])
+    for r in rects:
+        blocked.update((x, y) for y in range(r.y, r.y + r.h) for x in range(r.x, r.x + r.w))
+    return blocked
+
+
+def _label_rect(a: Appearance) -> Rect:
+    from rich.cells import cell_len
+
+    return Rect(a.x + 2, a.y, cell_len(a.label), 1)
+
+
+def _overlap(a: Rect, b: Rect) -> bool:
+    return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h
+
+
+__all__ = ["Appearance", "Pet", "Play", "World"]

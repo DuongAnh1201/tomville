@@ -72,3 +72,48 @@ def test_live_panels_with_offline_sources(tmp_path, monkeypatch):
             assert app.reader.settings.check_seconds == 120
             assert app.query_one(EventsPanel).lines
     asyncio.run(run())
+
+
+def test_f_cycles_frame_rate_and_events_reach_the_world(tmp_path):
+    from tomville.core.models import Agent, AgentAppeared, Status
+
+    async def run():
+        app = TomvilleApp(project=tmp_path, fps=10, live=False)
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("f")
+            fps = app.fps
+            app.handle_event(AgentAppeared(Agent("codex1", "codex", Status.WORKING, "w1:p1")))
+            await pilot.pause(0.5)
+            return fps, "codex1" in app.world.pets, "codex1 appeared" in str(app.query_one("EventsPanel").lines)
+
+    assert asyncio.run(run()) == (15, True, True)
+
+
+def test_start_up_snapshot_places_pets_without_handover(tmp_path, monkeypatch):
+    from tomville.core import events
+    from tomville.core.models import Agent, Status
+    from tomville.core.settings import ReaderSettings
+
+    async def run():
+        monkeypatch.setenv('HERDR_SOCKET_PATH', str(tmp_path / 'missing.sock'))
+        team = [Agent('claude', 'claude', Status.WORKING, 'w1:p1'), Agent('codex1', 'codex', Status.WORKING, 'w4:p1'), Agent('claude2', 'claude', Status.WORKING, 'w5:p1')]
+
+        async def snapshot():
+            return team
+
+        monkeypatch.setattr(events, 'agent_list', snapshot)
+        (tmp_path / 'TASKS.md').write_text('| id | title | status | agent |\n| -- | -- | -- | -- |\n| T1 | a | todo | codex1 |\n| T2 | b | todo | claude2 |\n')
+        app = TomvilleApp(project=tmp_path, settings=ReaderSettings(source='tasks-md', poll_seconds=.02))
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.pause(.3)
+            world = app.world
+            seats = world.office.seats
+            assert {n: world.pets[n].cell for n in team_names(team)} == {n: seats[n] for n in team_names(team)}
+            assert not any(p.script or p.bubbles for p in world.pets.values())
+            assert set(world.cards) == {'T1', 'T2'}
+
+    def team_names(team):
+        return [a.name for a in team]
+
+    asyncio.run(run())

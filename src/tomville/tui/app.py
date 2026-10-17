@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from datetime import datetime
 from rich.text import Text
 
 from tomville.core.events import EventReader
-from tomville.core.models import AgentAppeared, AgentLeft, AgentStatusChanged, CardChanged, CardRemoved, BoardOffline, BoardOnline, Column
+from tomville.core.models import AgentAppeared, AgentLeft, AgentStatusChanged, CardChanged, CardRemoved, BoardOffline, BoardOnline, Column, Event
 from tomville.core.settings import load_reader_settings
 
 from textual.app import App, ComposeResult
@@ -15,10 +16,15 @@ from textual.binding import Binding
 from textual.containers import Container, Vertical
 from textual.widgets import Footer, Header, RichLog, Static
 
+from tomville.core.world import World
 from tomville.tui.office import OfficeView
 
 # Below this width the sidebar moves under the office floor.
 PORTRAIT_BELOW = 100
+
+FPS_CHOICES = (5, 10, 15, 30)
+DEFAULT_FPS = 10
+MAX_DT = 0.5  # a stalled frame never makes pets jump across the office
 
 
 class TeamPanel(Static):
@@ -62,20 +68,34 @@ class TomvilleApp(App):
     BINDINGS = [
         Binding("g", "board_interval", "Board interval"),
         Binding("q", "quit", "Quit"),
+        Binding("f", "cycle_fps", "FPS"),
         Binding("question_mark", "help", "Help", key_display="?"),
     ]
 
-    def __init__(self, project: Path | None = None, ville: str = "Tomville", settings=None, live: bool = True) -> None:
+    def __init__(
+        self,
+        project: Path | None = None,
+        ville: str = "Tomville",
+        settings=None,
+        live: bool = True,
+        lead: str | None = "claude",
+        fps: int = DEFAULT_FPS,
+    ) -> None:
         super().__init__()
         self.project = (project or Path.cwd()).resolve()
         self.ville = ville
         self.reader = EventReader(self.project, settings or load_reader_settings(self.project))
+        self.reader.snapshot = self.load_snapshot
         self.live = live
+        self.world = World(lead=lead)
+        self.fps = fps
+        self._frame_timer = None
+        self._last_frame = time.monotonic()
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(id="main"):
-            yield OfficeView()
+            yield OfficeView(self.world)
             with Vertical(id="sidebar"):
                 yield TeamPanel()
                 yield BoardPanel()
@@ -86,8 +106,32 @@ class TomvilleApp(App):
         self.title = f"{self.ville} · {self.project.name}"
         self._apply_layout(self.size.width)
         self.query_one(EventsPanel).write("Office open. Waiting for agents…")
+        self._start_timer()
         if self.live:
-            self.run_worker(self.reader.run(self.apply_event), name="live-data")
+            self.run_worker(self.reader.run(self.handle_event), name="live-data")
+
+    def _start_timer(self) -> None:
+        if self._frame_timer is not None:
+            self._frame_timer.stop()
+        self._last_frame = time.monotonic()
+        self._frame_timer = self.set_interval(1 / self.fps, self._frame)
+
+    def _frame(self) -> None:
+        now = time.monotonic()
+        self.world.tick(min(now - self._last_frame, MAX_DT))
+        self._last_frame = now
+        for view in self.query(OfficeView):  # none left while the app shuts down
+            view.refresh()
+
+    def on_unmount(self) -> None:
+        if self._frame_timer is not None:
+            self._frame_timer.stop()
+
+    def action_cycle_fps(self) -> None:
+        i = FPS_CHOICES.index(self.fps) if self.fps in FPS_CHOICES else -1
+        self.fps = FPS_CHOICES[(i + 1) % len(FPS_CHOICES)]
+        self._start_timer()
+        self.notify(f"{self.fps} fps", title="Frame rate", timeout=2)
 
     def on_resize(self, event) -> None:
         self._apply_layout(event.size.width)
@@ -106,7 +150,14 @@ class TomvilleApp(App):
         self.query_one(BoardPanel).border_title = f"Board · {self.reader.settings.check_seconds:g} s"
         self.notify(f"Board check: {self.reader.settings.check_seconds} s")
 
-    def apply_event(self, event):
+    def load_snapshot(self, agents, cards) -> None:
+        """The reader's first state: pets and cards appear in place, with no handovers."""
+        self.world.load(agents, cards)
+        self._show_state()
+
+    def handle_event(self, event: Event) -> None:
+        """Every event from the reader: the world moves pets, the panels show it."""
+        self.world.apply(event)
         if isinstance(event, AgentAppeared):
             message = f"{event.agent.name} appeared ({event.agent.status})"
         elif isinstance(event, AgentStatusChanged):
@@ -124,6 +175,9 @@ class TomvilleApp(App):
         else:
             return
         self.query_one(EventsPanel).write(Text(f"{datetime.now():%H:%M:%S} {message}"))
+        self._show_state()
+
+    def _show_state(self) -> None:
         self.query_one(TeamPanel).update(Text("\n".join(f"{a.name}  {a.kind}  {a.status}" for a in self.reader.agents.values()) or "No agents yet"))
         board = self.query_one(BoardPanel)
         board.border_title = f"Board · {self.reader.settings.check_seconds:g} s"

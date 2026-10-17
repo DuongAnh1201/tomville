@@ -11,7 +11,7 @@ from tomville.core.board.base import BoardUnavailable
 from tomville.core.board.github import GitHubBoard, cards_from_issues
 from tomville.core.board.tasks_md import TasksMarkdownBoard
 from tomville.core.events import EventReader, parse_agents
-from tomville.core.models import AgentAppeared, AgentLeft, AgentStatusChanged, BoardOffline, BoardOnline, CardChanged, CardRemoved, Column, Status
+from tomville.core.models import Agent, AgentAppeared, AgentLeft, AgentStatusChanged, BoardOffline, BoardOnline, CardChanged, CardRemoved, Column, Status
 from tomville.core.settings import ReaderSettings, load_reader_settings
 
 FIXTURES = Path(__file__).parent / 'fixtures'
@@ -124,3 +124,18 @@ def test_socket_status_and_disconnect_polling(tmp_path, monkeypatch):
             server.close()
             await server.wait_closed()
     asyncio.run(run())
+
+
+def test_first_state_goes_to_snapshot_not_events(tmp_path):
+    board = TasksMarkdownBoard(tmp_path / 'TASKS.md')
+    board.path.write_text('| id | title | status | agent |\n| -- | -- | -- | -- |\n| T1 | Fix login | todo | codex1 |\n')
+    reader = EventReader(tmp_path, board=board)
+    emitted, snapshots = [], []
+    reader.snapshot = lambda agents, cards: snapshots.append((agents, cards))
+    codex = Agent('codex1', 'codex', Status.WORKING, 'w4:p1')
+    reader._emit('agents', reader.update_agents([codex]), emitted.append)
+    reader._emit('board', reader.update_board(), emitted.append)
+    assert emitted == []
+    assert [a.name for a in snapshots[-1][0]] == ['codex1'] and [c.id for c in snapshots[-1][1]] == ['T1']
+    reader._emit('agents', reader.update_agents([replace(codex, status=Status.IDLE)]), emitted.append)
+    assert emitted == [AgentStatusChanged('codex1', Status.WORKING, Status.IDLE)]
