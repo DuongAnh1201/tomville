@@ -95,15 +95,17 @@ def test_task_take_preserves_other_labels_and_is_repeatable(tmp_path, monkeypatc
     def run(args, project):
         commands.append(args)
         if 'view' in args:
-            return json.dumps({'state': 'OPEN', 'labels': [{'name': n} for n in ('status:todo', 'status:doing', 'agent:claude', 'agent:codex1', 'bug')]})
+            return json.dumps({'state': 'OPEN', 'labels': [{'name': n} for n in ('status:todo', 'status:doing', 'agent:claude2', 'agent:codex1', 'bug')]})
         return 'updated'
     monkeypatch.setattr(tasks, 'run_command', run)
     assert main(['task', 'take', '6', '--agent', 'codex1', '--json']) == 0
     edit = commands[-1]
-    assert '--remove-label' in edit and 'status:todo' in edit and 'agent:claude' in edit
+    assert '--remove-label' in edit and 'status:todo' in edit
     assert 'bug' not in edit
     removed = [edit[i+1] for i, value in enumerate(edit) if value == '--remove-label']
-    assert 'status:doing' not in removed and 'agent:codex1' not in removed
+    assert removed == ['status:todo']
+    added = [edit[i+1] for i, value in enumerate(edit) if value == '--add-label']
+    assert added == ['status:doing', 'agent:codex1']
     assert json.loads(capsys.readouterr().out)['result'] == '#6 → doing'
 
 
@@ -213,3 +215,28 @@ def test_config_path_show_and_no_color_env(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv('NO_COLOR', '1')
     assert main(['status', '--demo']) == 0
     assert '\x1b[' not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('column', ['todo', 'doing', 'review', 'done'])
+@pytest.mark.parametrize('agent', [None, 'codex1'])
+def test_task_move_preserves_all_agent_labels(tmp_path, monkeypatch, column, agent):
+    labels = {'status:doing', 'agent:codex1', 'agent:claude2', 'bug'}
+    commands = []
+
+    def run(args, project):
+        commands.append(args)
+        if 'view' in args:
+            return json.dumps({'state': 'OPEN', 'labels': [{'name': name} for name in sorted(labels)]})
+        if 'edit' in args:
+            for index, value in enumerate(args):
+                if value == '--remove-label':
+                    labels.discard(args[index + 1])
+                elif value == '--add-label':
+                    labels.add(args[index + 1])
+        return 'updated'
+
+    monkeypatch.setattr(tasks, 'run_command', run)
+    tasks.Tasks(tmp_path, OfficeSettings()).move(6, column, agent)
+    assert {'agent:codex1', 'agent:claude2', 'bug'} <= labels
+    assert {label for label in labels if label.startswith('status:')} == (set() if column == 'done' else {f'status:{column}'})
+    assert all(not command[index + 1].startswith('agent:') for command in commands for index, value in enumerate(command) if value == '--remove-label')

@@ -44,7 +44,7 @@ class Tasks:
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             raise OSError(f'invalid GitHub issue response: {exc}') from exc
         args = ['edit', str(number)]
-        remove = [label['name'] for label in issue['labels'] if (label['name'].startswith('status:') and label['name'] != f'status:{column}') or (agent and label['name'].startswith('agent:') and label['name'] != f'agent:{agent}')]
+        remove = [label['name'] for label in issue['labels'] if label['name'].startswith('status:') and label['name'] != f'status:{column}']
         for label in remove:
             args += ['--remove-label', label]
         if column != 'done':
