@@ -635,6 +635,7 @@ Rules for phase 1 that keep phase 3 easy:
 ### Later (any phase)
 
 - Pet editor: paint pets by tapping cells.
+- Pixel-art pets from online sets: `tmv pets import cat.png --frames 4 --size 8x8 --name ginger` turns a sprite sheet into a block-pixel pet (Pillow + half-block `▄` rendering, as in Rich Pixels); a "big mode" office for full-size sprites; a community pet gallery repo (`tmv pets install fox`). Bundle only CC0 art (e.g. OpenGameArt "Cat & Dog Free Sprites", itch.io CC0 cat and dog sheets); not vscode-pets art, whose licence is unclear.
 - Prompt box that sends tasks to the lead (`herdr agent prompt claude "..."`).
 - GitHub Projects (kanban) view on top of the Issues board; needs the `project` scope on `gh`.
 - Full setup wizard with live previews; more themes.

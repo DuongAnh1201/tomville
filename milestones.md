@@ -205,6 +205,7 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-17: Pixel-art pets from online sets (`pets import`, big mode, pet gallery) saved as a later update in [idea.md](idea.md#later-updates); not in any milestone. Pets stay built-in for now.
 - 2026-10-17: GitHub Issues is the main board (plug-in, `TASKS.md` as the alternative); user-chosen `check_seconds`; `tmv task` commands; agent rules 8 and 9.
 
 - 2026-10-17: Split into Part 1 (fundamentals, lead + workers and pipeline) and Part 2 (other shapes and polish). Custom pets, block pixels, themes and power saving moved to Part 2.

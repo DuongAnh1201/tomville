@@ -151,6 +151,17 @@ The build is split in two (details in [milestones.md](milestones.md)):
 
 Part 1 builds the team shape as a plug-in, so Part 2 shapes don't change the core.
 
+## Later updates
+
+Ideas saved for after the current plan. Not in any milestone yet.
+
+- **Pets from online pixel-art sets.** For now pets are chosen normally (built-in cat, dog, sheep in emoji or ASCII). Later:
+  - `tmv pets import cat.png --frames 4 --size 8x8 --name ginger`: cut a sprite sheet into frames, shrink it, save it as a block-pixel pet. Uses Pillow and the half-block trick (`▄`, top pixel as background colour, bottom as text colour: 2 pixels per cell), as in the Rich Pixels library.
+  - Size is the catch: 16×16 pixels = 16 × 8 cells, too big for the ~128 × 24 office. So shrink to 8×8, or add a "big mode" office, or show full sprites in the web UI.
+  - A community pet gallery (a GitHub repo of CC0 pets): `tmv pets install fox`.
+  - Licence: ship only CC0 art inside the package. Candidates: OpenGameArt "Cat & Dog Free Sprites" (opengameart.org/node/48447), itch.io CC0 sets (zeenaz "Free Pixel Animation – Cat", rmazanek "Dog"). Avoid vscode-pets art: some came from paid packs.
+- From the walkthrough, not yet decided: `tmv up` (start the whole team in herdr panes from settings), `tmv task assign 12 codex1`, a `P` key to prompt the selected pet from the office.
+
 ## Development setup
 
 - Ubuntu 26.04 in Termux PRoot, aarch64; Python 3.14.4; herdr 0.9.5; Claude Code and Codex logged in; `gh` logged in as DuongAnh1201 over HTTPS.
