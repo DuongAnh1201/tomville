@@ -73,7 +73,14 @@ From inside herdr, with only this Claude session running:
   "terminal_title":"◑ Permission and GitHub config","terminal_title_stripped":"Permission and GitHub config"}]}}
 ```
 
-Still to check: whether `agent` is the kind or the given name once an agent is started with `herdr agent start <name>`.
+**Named agents** (checked 2026-10-17 after `herdr agent start codex1 --kind codex …`): `agent` is always the **kind** and the given name is in a separate **`name`** field. An agent started by hand (like the lead) has no `name`:
+
+```json
+{"name":"codex1","agent":"codex","agent_status":"idle","pane_id":"w4:p1","cwd":"/root/.herdr/worktrees/tomville/m2-events", …}
+{"agent":"claude","agent_status":"working","pane_id":"w1:p1","cwd":"/root", …}
+```
+
+So Tomville uses `name` when present, else the kind (`Agent.from_herdr` does this). Two unnamed agents of the same kind would clash, so every worker should be started with a name. Right after start, an agent can show `blocked` for a moment before it settles to `idle`.
 
 ### Live event stream
 
@@ -214,4 +221,3 @@ Ideas saved for after the current plan. Not in any milestone yet.
 - Licence: MIT, or another?
 - Which default for `check_seconds` feels right on the tablet: 30 or 60?
 - Does Codex have a hook like Claude's `PreToolUse` for logging messages?
-- What does `herdr agent list` show for a named agent (`herdr agent start codex1 …`)?
