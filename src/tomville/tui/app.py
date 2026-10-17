@@ -20,8 +20,10 @@ from tomville.core.sprites import Sprites
 from tomville.core.world import World
 from tomville.tui.office import OfficeView
 
-# Below this width the sidebar moves under the office floor.
-PORTRAIT_BELOW = 100
+# Terminal cells are roughly twice as tall as they are wide.
+MIN_OFFICE_WIDTH = 30
+MIN_OFFICE_HEIGHT = 10
+MIN_SIDEBAR_HEIGHT = 14  # Team 5 + Board 3 + Events 6 (including borders)
 
 FPS_CHOICES = (5, 10, 15, 30)
 DEFAULT_FPS = 10
@@ -30,7 +32,7 @@ MAX_DT = 0.5  # a stalled frame never makes pets jump across the office
 
 class TeamPanel(Static):
     DEFAULT_CSS = """
-    TeamPanel { height: auto; min-height: 5; border: round $secondary; padding: 0 1; }
+    TeamPanel { height: 1fr; min-height: 5; max-height: 8; border: round $secondary; padding: 0 1; }
     """
 
     def on_mount(self) -> None:
@@ -78,11 +80,12 @@ class TomvilleApp(App):
     #main { layout: horizontal; }
     #sidebar { width: 36; }
     #main.portrait { layout: vertical; }
-    #main.portrait OfficeView { height: 2fr; }
-    #main.portrait #sidebar { width: 1fr; height: 1fr; }
+    #main.portrait OfficeView { height: 1fr; }
+    #main.sidebar-overlay #sidebar { overlay: screen; position: absolute; }
     """
 
     BINDINGS = [
+        Binding("t", "toggle_sidebar", "Sidebar"),
         Binding("g", "board_interval", "Board interval"),
         Binding("q", "quit", "Quit"),
         Binding("f", "cycle_fps", "FPS"),
@@ -111,6 +114,7 @@ class TomvilleApp(App):
         self.world = make_world(self.settings, lead)
         self.sprites = sprites or Sprites.from_settings(self.settings)
         self.fps = fps if fps is not None else getattr(self.settings, "fps", DEFAULT_FPS)
+        self._sidebar_visible: bool | None = None  # None follows available space
         self._frame_timer = None
         self._last_frame = time.monotonic()
 
@@ -126,7 +130,7 @@ class TomvilleApp(App):
 
     def on_mount(self) -> None:
         self.title = f"{self.ville} · {self.project.name}"
-        self._apply_layout(self.size.width)
+        self._apply_layout(self.size.width, self.size.height)
         self.query_one(EventsPanel).write("Office open. Waiting for agents…")
         self._start_timer()
         if getattr(self.settings, 'theme', 'night') == 'game-boy':
@@ -175,14 +179,37 @@ class TomvilleApp(App):
         self.notify(f"{self.fps} fps", title="Frame rate", timeout=2)
 
     def on_resize(self, event) -> None:
-        self._apply_layout(event.size.width)
+        self._apply_layout(event.size.width, event.size.height)
 
-    def _apply_layout(self, width: int) -> None:
+    def _apply_layout(self, width: int, height: int) -> None:
         layout = getattr(self.settings, "layout", "auto")
-        self.query_one("#main").set_class(layout == "portrait" or (layout == "auto" and width < PORTRAIT_BELOW), "portrait")
+        portrait = layout == "portrait" or (layout == "auto" and height * 2 > width)
+        main = self.query_one("#main")
+        sidebar = self.query_one("#sidebar")
+        main.set_class(portrait, "portrait")
+        available_height = max(0, height - 2)  # Header and Footer
+        sidebar_width = max(24, min(36, width // 4))
+        sidebar_height = available_height // 3 if portrait else available_height
+        fits = (width >= MIN_OFFICE_WIDTH and
+                sidebar_height >= MIN_SIDEBAR_HEIGHT and
+                (available_height - sidebar_height >= MIN_OFFICE_HEIGHT if portrait
+                 else width - sidebar_width >= MIN_OFFICE_WIDTH))
+        visible = fits if self._sidebar_visible is None else self._sidebar_visible
+        # Explicitly revealing panels on a tiny screen overlays them, preserving
+        # the office's minimum size. Press t again to return to the office.
+        overlay = visible and not fits
+        main.set_class(overlay, "sidebar-overlay")
+        sidebar.styles.offset = (max(0, width - sidebar_width), 0) if overlay else (0, 0)
+        sidebar.display = visible
+        sidebar.styles.width = sidebar_width if not portrait or overlay else width
+        sidebar.styles.height = available_height if overlay or not portrait else sidebar_height
+
+    def action_toggle_sidebar(self) -> None:
+        self._sidebar_visible = not self.query_one("#sidebar").display
+        self._apply_layout(self.size.width, self.size.height)
 
     def action_help(self) -> None:
-        self.notify("q quit · G board interval · ? help.", title="Keys")
+        self.notify("q quit · t sidebar · G board interval · ? help.", title="Keys")
 
     def action_board_interval(self):
         choices = (15, 30, 60, 120)
