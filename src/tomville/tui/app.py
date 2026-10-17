@@ -9,7 +9,7 @@ from rich.text import Text
 
 from tomville.core.events import EventReader
 from tomville.core.models import AgentAppeared, AgentLeft, AgentStatusChanged, CardChanged, CardRemoved, BoardOffline, BoardOnline, Column, Event
-from tomville.core.settings import load_reader_settings
+from tomville.core.settings import load_settings
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -78,17 +78,18 @@ class TomvilleApp(App):
         ville: str = "Tomville",
         settings=None,
         live: bool = True,
-        lead: str | None = "claude",
-        fps: int = DEFAULT_FPS,
+        lead: str | None = None,
+        fps: int | None = None,
     ) -> None:
         super().__init__()
         self.project = (project or Path.cwd()).resolve()
         self.ville = ville
-        self.reader = EventReader(self.project, settings or load_reader_settings(self.project))
+        self.settings = settings or load_settings(self.project)
+        self.reader = EventReader(self.project, self.settings)
         self.reader.snapshot = self.load_snapshot
         self.live = live
-        self.world = World(lead=lead)
-        self.fps = fps
+        self.world = World(lead=lead if lead is not None else getattr(self.settings, "lead", None) or "claude")
+        self.fps = fps if fps is not None else getattr(self.settings, "fps", DEFAULT_FPS)
         self._frame_timer = None
         self._last_frame = time.monotonic()
 
@@ -107,6 +108,16 @@ class TomvilleApp(App):
         self._apply_layout(self.size.width)
         self.query_one(EventsPanel).write("Office open. Waiting for agents…")
         self._start_timer()
+        if getattr(self.settings, 'theme', 'night') == 'game-boy':
+            self.theme = 'textual-light'
+        elif getattr(self.settings, 'theme', 'night') == 'green-screen':
+            self.theme = 'textual-ansi'
+        if getattr(self.settings, 'demo', False):
+            from tomville.core.status import demo_data
+            agents, cards = demo_data()
+            self.reader.update_agents(agents)
+            self.reader.cards = {card.id: card for card in cards}
+            self.load_snapshot(agents, cards)
         if self.live:
             self.run_worker(self.reader.run(self.handle_event), name="live-data")
 
@@ -137,7 +148,8 @@ class TomvilleApp(App):
         self._apply_layout(event.size.width)
 
     def _apply_layout(self, width: int) -> None:
-        self.query_one("#main").set_class(width < PORTRAIT_BELOW, "portrait")
+        layout = getattr(self.settings, "layout", "auto")
+        self.query_one("#main").set_class(layout == "portrait" or (layout == "auto" and width < PORTRAIT_BELOW), "portrait")
 
     def action_help(self) -> None:
         self.notify("q quit · G board interval · ? help.", title="Keys")

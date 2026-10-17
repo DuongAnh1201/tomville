@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 authors = [{ name = "Tom Nguyen", email = "tomnguyen6766@gmail.com" }]
 dependencies = [
     "textual>=8.2.8",
+    "tomli-w>=1.2.0",
 ]
 
 [project.scripts]
