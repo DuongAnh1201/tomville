@@ -180,6 +180,8 @@ herdr shows *what* each agent is doing, but not *who sent a prompt to whom*: the
 
 In the office: the sender's pet carries `✉` to the target's desk with a speech bubble, the Events panel shows `10:42 claude → codex1: Fix the login test`, and an unknown sender shows `?`.
 
+
+**Codex hooks** (checked 2026-10-17, Codex CLI 0.163.0): Codex has a hook system too. It is the `hooks` feature (stable, on in `~/.codex/config.toml`), with hooks in `~/.codex/hooks.json` in the same JSON shape as Claude's. herdr's Codex integration already uses a `SessionStart` hook there. Each hook has to be trusted once (a hash in `[hooks.state]`). Not checked yet: whether Codex offers a before-tool event like Claude's `PreToolUse`, and what its payload looks like. Until then, Codex messages are logged when Codex uses `tmv send`, and otherwise the pipeline's timing guess covers them.
 ## Look and feel
 
 - Retro game in a character grid, movement one cell at a time.
@@ -220,4 +222,4 @@ Ideas saved for after the current plan. Not in any milestone yet.
 - Which pet and colour for each agent?
 - Licence: MIT, or another?
 - Which default for `check_seconds` feels right on the tablet: 30 or 60?
-- Does Codex have a hook like Claude's `PreToolUse` for logging messages?
+- Does Codex have a before-tool hook event (like Claude's `PreToolUse`) to log its direct `herdr agent prompt` calls?

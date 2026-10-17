@@ -109,10 +109,10 @@ Checked with fake events (`tests/test_world.py`, `tests/test_app.py`) and live i
 
 - [x] `tmv send AGENT TEXT`: sender from `HERDR_PANE_ID`, calls `herdr agent prompt`, appends to `.tomville/messages.jsonl`
 - [x] Claude Code `PreToolUse` hook that logs direct `herdr agent prompt` calls
-- [ ] Envelope walk, speech bubble, `claude → codex1: …` in Events (both shapes)
-- [ ] Conveyor-belt office map; `[team] shape = "pipeline"`, `stages = [...]`; `--team`
-- [ ] Pipeline handoff from the log; timing guess as fallback, shown with `?`
-- [ ] Check whether Codex has an equivalent hook; note the answer in [idea.md](idea.md)
+- [x] Envelope walk, speech bubble, `claude → codex1: …` in Events (both shapes)
+- [x] Conveyor-belt office map; `[team] shape = "pipeline"`, `stages = [...]`; `--team`
+- [x] Pipeline handoff from the log; timing guess as fallback, shown with `?`
+- [x] Check whether Codex has an equivalent hook; note the answer in [idea.md](idea.md)
 
 **Check:** in lead + workers, `tmv send codex1 "…"` walks an envelope from lead to worker. With planner, coder and tester running in herdr, `tmv send` moves a card along the belt, and an unlogged handoff shows `?`.
 
