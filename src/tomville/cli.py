@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 from pathlib import Path
@@ -216,15 +217,33 @@ def setup_command(args, project, settings):
 
 def offer_new(args, project, settings):
     """Bare `tomville` in a project with no ville: offer `tmv new`. True if it created one."""
+    if settings.demo or not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return False
     from tomville.core.ville import has_ville
 
-    if settings.demo or has_ville(project) or not (sys.stdin.isatty() and sys.stdout.isatty()):
+    if has_ville(project):
         return False
     if not confirm('No ville in this project yet. Create one now with `tmv new`?'):
         return False
     args.name, args.yes, args.claude_settings = None, False, None
     new_command(args, project)
     return True
+
+
+def dependency_checks():
+    """Check imports in the running tool's interpreter, not another install."""
+    checks = []
+    for module in ('textual', 'tomli_w'):
+        try:
+            importlib.import_module(module)
+        except ImportError as exc:
+            checks.append(dict(name=f'Dependency {module}', ok=False,
+                               detail=str(exc), required=True,
+                               fix='uv tool install --editable . --reinstall'))
+        else:
+            checks.append(dict(name=f'Dependency {module}', ok=True,
+                               detail='installed', required=True, fix=''))
+    return checks
 
 
 def main(argv=None):
@@ -250,7 +269,10 @@ def main(argv=None):
             return status_command(args, project, settings)
         if args.command == 'doctor':
             from tomville.core.doctor import diagnose
+            dependencies = dependency_checks()
             result = diagnose(project, settings, args.config)
+            result['checks'] = dependencies + result['checks']
+            result['problems'] += sum(not check['ok'] for check in dependencies)
             lines = [f'Tomville doctor · v{__version__}']
             for check in result['checks']:
                 if args.quiet and check['ok']:
@@ -270,7 +292,9 @@ def main(argv=None):
             result = send(repo_root(project), args.agent, ' '.join(args.text), args.wait, args.timeout)
             output({'sent': args.agent, 'herdr': result}, args, f'sent to {args.agent}')
             return 0
-        if args.command is None and offer_new(args, project, settings):
+        if (args.command is None and not settings.demo
+                and sys.stdin.isatty() and sys.stdout.isatty()
+                and offer_new(args, project, settings)):
             settings = load_settings(project, config=args.config)
         from tomville.tui.app import TomvilleApp
         previous_no_color = os.environ.get('NO_COLOR')
