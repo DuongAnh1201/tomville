@@ -79,6 +79,24 @@ When a PR is opened:
 - Stay inside your issue's milestone. Shared types (`src/tomville/core/models.py`) and plug-in interfaces change only through the lead: if you need a change, say so in your PR.
 - Found a bug or idea outside your issue? Open an issue (`gh issue create --label bug` or `--label idea`) instead of fixing it now.
 
+## Your queue
+
+You don't watch GitHub on your own. The lead (or Tom) sends you a short nudge such as **"Check your issues and take the next one."** Then:
+
+1. **Finish first.** If you already have an issue labelled `status:doing` and `agent:<you>`, keep working on it.
+2. **List your queue:** open issues with your label that nobody has started:
+   ```bash
+   gh issue list --label agent:<you> --label status:todo --state open --json number,title,labels
+   ```
+3. **Pick the lowest number** (oldest first). Skip an issue if its body says it waits on another open issue, and say so.
+4. **Take it and read it:** `gh issue edit N --add-label status:doing --remove-label status:todo`, then `gh issue view N --comments`. The issue body and comments are your task; the matching milestone in `milestones.md` has the Check.
+5. **Work it** as in [Every change](#every-change-issue--branch--pr--comment--merge): branch, PR with `Fixes #N`, detailed issue comment.
+6. **Report and stop:** end with `DONE #N: <PR URL>`. Don't start the next issue until you are nudged again; the lead reviews and merges first.
+
+**Empty queue?** End with `IDLE: no issues for <you>`. Don't take issues labelled for another agent, and don't take unlabelled ones; ask the lead.
+
+The lead knows when you finish because herdr reports your status (`done`, `blocked`, `idle`); the lead waits on it with `herdr agent wait <you>` in the background.
+
 ## The board: GitHub Issues
 
 - **Take an issue:** `gh issue edit N --add-label status:doing,agent:<you> --remove-label status:todo`
@@ -109,3 +127,4 @@ The lead reads the end of your output. Finish every task with one line:
 
 - `DONE #N: <PR URL>` (only after the PR is open and the issue comment is posted)
 - `BLOCKED #N: <what is wrong and what you need>`
+- `IDLE: no issues for <you>`
