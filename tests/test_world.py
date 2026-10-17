@@ -238,3 +238,9 @@ def test_another_shape_plugs_in_without_changing_the_core():
     assert w.pets["c"].cell == w.office.seats["c"]
     w.apply(CardChanged(card("#1", Column.TODO, "c"), None))  # no play: nothing happens
     assert not any(p.script for p in w.pets.values())
+
+
+def test_blocked_and_unknown_pets_start_at_their_desk():
+    w = make(agent("codex1", Status.UNKNOWN), agent("codex2", Status.BLOCKED))
+    assert w.pets["codex1"].cell == seat(w, "codex1")
+    assert w.pets["codex2"].cell == seat(w, "codex2")

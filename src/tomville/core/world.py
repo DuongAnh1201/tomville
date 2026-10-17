@@ -355,7 +355,9 @@ class World:
             if snap:
                 pet.path.clear()
                 pet.script.clear()
-                home = self._home(pet)
+                # Blocked and unknown pets have no target; without a known spot
+                # they start at their desk.
+                home = self._home(pet) or self.office.seats.get(pet.name)
                 if home:
                     pet.x, pet.y = home
                 elif pet.cell in self._blocked or not self._inside(pet.cell):
