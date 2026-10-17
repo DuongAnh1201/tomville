@@ -1,4 +1,4 @@
-# Proposal: Pixel Office, a retro game view of the agent team
+# Proposal: Tomville, a retro game view of the agent team
 
 2026-10-16 · Tom Nguyen
 
@@ -15,9 +15,9 @@ Two ways to use it, built in this order:
 
 | Phase | What | When |
 | --- | --- | --- |
-| 1. CLI | `pixel-office` / `pxo`: the office in the terminal, plus one-shot commands | The two-day weekend build |
+| 1. CLI | `tomville` / `tv`: the office in the terminal, plus one-shot commands | The two-day weekend build |
 | 2. Publish | One-line install, like herdr: `curl -fsSL …/install.sh \| sh`, plus PyPI | Right after the weekend |
-| 3. Web UI | The same office in a browser: `pxo web` | Later |
+| 3. Web UI | The same office in a browser: `tv web` | Later |
 
 Both the CLI and the web UI use one shared core (status poller, world model, sprites, settings), so the web UI adds a new front end, not a second app. See [Roadmap](#roadmap).
 
@@ -38,7 +38,7 @@ Still needed at build time: Python 3.11+ and `uv` (install steps in [Install](#i
 Landscape on an 11-inch tablet, about 140 × 40 cells:
 
 ```
-┌ Pixel Office · myproject ─────────────────────────────────────┬ Team ──────────────────────────┐
+┌ Tomville · myproject ─────────────────────────────────────────┬ Team ──────────────────────────┐
 │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │ 🐱 claude  lead    working     │
 │ ▓  DESKS              ▓  REVIEW         ▓  DONE              ▓ │ 🐶 codex1  worker  BLOCKED !   │
 │ ▓  ┌──┐  ┌──┐  ┌──┐   ▓  ┌────────┐     ▓  ┌────────┐        ▓ │ 🐑 codex2  worker  idle        │
@@ -85,7 +85,7 @@ When the lead assigns a task (a new `doing` row in `TASKS.md`), the lead pet wal
 | World model | Holds each pet's position, target zone and current animation. Events change targets; it does not draw anything |
 | Movement | Each tick, a pet steps one cell toward its target: first along x, then along y, around walls |
 | Renderer | A Textual widget that draws the office map, then each pet's current frame at its position. Textual only redraws changed cells |
-| Settings | `settings.toml`, changed in the app with hotkeys or from the shell with `pxo config set` |
+| Settings | `settings.toml`, changed in the app with hotkeys or from the shell with `tv config set` |
 
 The renderer never calls herdr directly, and the poller never draws. That keeps the game part testable with fake events and no agents running.
 
@@ -133,10 +133,10 @@ Press `S` to cycle through styles. Each pet has the same frames in each style.
 | ASCII | `^^` | `^^` / `^-` | `^^#` | Works on every font |
 | Block pixel | `▟▙` | `▟▙` / `▙▟` | `▟▙▒` | Most "retro game" |
 
-Sprites are plain text files, one folder per pet. Built-in pets ship inside the package; your own go in `~/.config/pixel-office/sprites/` (see [Custom pets and colours](#custom-pets-and-colours)):
+Sprites are plain text files, one folder per pet. Built-in pets ship inside the package; your own go in `~/.config/tomville/sprites/` (see [Custom pets and colours](#custom-pets-and-colours)):
 
 ```
-src/pixel_office/data/sprites/
+src/tomville/data/sprites/
   cat/
     emoji.txt     # frames separated by a line with ---
     ascii.txt
@@ -144,7 +144,7 @@ src/pixel_office/data/sprites/
   dog/ ...
 ```
 
-`~/.config/pixel-office/settings.toml`:
+`~/.config/tomville/settings.toml`:
 
 ```toml
 fps = 10
@@ -194,7 +194,7 @@ Termux supports 24-bit colour, so any hex colour works.
 
 Each frame has two grids side by side: the shape on the left, colour letters on the right. A `[palette]` maps each letter to a hex colour. Frames are separated by `---`.
 
-`~/.config/pixel-office/sprites/fox/blocks.txt`:
+`~/.config/tomville/sprites/fox/blocks.txt`:
 
 ```
 # shape        # colours
@@ -219,11 +219,11 @@ Rules:
 - A space in the colour grid means "no colour".
 - The first frame is used when standing still; all frames play in a loop when moving or working.
 
-Your own pets go in `~/.config/pixel-office/sprites/<name>/` and override a built-in pet with the same name. Run `pixel-office pets list` to preview them all, and `pixel-office pets check <name>` to find mistakes in a pet file.
+Your own pets go in `~/.config/tomville/sprites/<name>/` and override a built-in pet with the same name. Run `tomville pets list` to preview them all, and `tomville pets check <name>` to find mistakes in a pet file.
 
 ### Colours and themes
 
-In `~/.config/pixel-office/settings.toml`:
+In `~/.config/tomville/settings.toml`:
 
 ```toml
 theme = "night"          # night | game-boy | green-screen
@@ -240,41 +240,41 @@ Three built-in themes. Press `T` in the app to cycle them.
 
 ## Install and setup from the terminal
 
-One command installs it, and `pixel-office doctor` shows the whole setup in the terminal: what is ready, what is missing, and the command to fix it.
+One command installs it, and `tomville doctor` shows the whole setup in the terminal: what is ready, what is missing, and the command to fix it.
 
 ### Install
 
 After publishing (phase 2), one line, the same way herdr installs:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DuongAnh1201/pixel-office/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DuongAnh1201/tomville/main/install.sh | sh
 ```
 
 Or, for people who already use Python tools:
 
 ```bash
-uv tool install pixel-office     # or: pipx install pixel-office
+uv tool install tomville     # or: pipx install tomville
 ```
 
-Update with `pxo update`; remove with `pxo uninstall`. Settings in `~/.config/pixel-office/` stay.
+Update with `tv update`; remove with `tv uninstall`. Settings in `~/.config/tomville/` stay.
 
 During the weekend build (phase 1), install straight from GitHub:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-uv tool install git+https://github.com/DuongAnh1201/pixel-office
+uv tool install git+https://github.com/DuongAnh1201/tomville
 ```
 
 While the repo is private, this works only where `gh` is logged in with access, as on the development tablet.
 
 ## CLI
 
-`pixel-office` works like `claude` and `codex`: run it bare for the interactive app, add options to change how it runs, or use a command for a one-shot job that prints and exits. The installer also adds a short alias, `pxo`.
+`tomville` works like `claude` and `codex`: run it bare for the interactive app, add options to change how it runs, or use a command for a one-shot job that prints and exits. The installer also adds a short alias, `tv`.
 
 ```
-pixel-office [options]              open the office (interactive)
-pixel-office <command> [options]    run one command and exit
-pixel-office <command> --help       help for one command
+tomville [options]              open the office (interactive)
+tomville <command> [options]    run one command and exit
+tomville <command> --help       help for one command
 ```
 
 Every option is optional. With none, settings come from `settings.toml`, then built-in defaults.
@@ -284,14 +284,14 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | Option | Default | What it does |
 | --- | --- | --- |
 | `-C, --project DIR` | current folder | Project whose `TASKS.md` is shown |
-| `--config FILE` | `~/.config/pixel-office/settings.toml` | Use another settings file |
+| `--config FILE` | `~/.config/tomville/settings.toml` | Use another settings file |
 | `--json` | off | Machine-readable output, for scripts and agents |
 | `--no-color` | off | Plain text; also on when `NO_COLOR` is set |
 | `-q, --quiet` / `-v, --verbose` | normal | Less or more output |
 | `-h, --help` | | Show help |
 | `-V, --version` | | Show the version |
 
-### Office options (bare `pixel-office`)
+### Office options (bare `tomville`)
 
 | Option | Values | What it does |
 | --- | --- | --- |
@@ -320,7 +320,7 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `config path` / `config show` | Print the settings file location or contents | |
 | `config get KEY` / `config set KEY VALUE` | Read or change one setting, e.g. `config set fps 15` | |
 | `update` (phase 2) | Upgrade to the latest release, like `herdr update` | `--check` (only report) |
-| `uninstall` (phase 2) | Remove the app; keep or delete settings | `--purge` (also delete `~/.config/pixel-office/`) |
+| `uninstall` (phase 2) | Remove the app; keep or delete settings | `--purge` (also delete `~/.config/tomville/`) |
 | `web` (phase 3) | Serve the office in a browser | `--port 8787`, `--host 127.0.0.1` |
 | `completion SHELL` (later) | Print tab-completion for `bash`, `zsh` or `fish` | |
 
@@ -329,11 +329,11 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 The highest line wins:
 
 1. Command-line options (`--fps 15`)
-2. Environment variables: `PIXEL_OFFICE_FPS`, `PIXEL_OFFICE_STYLE`, `PIXEL_OFFICE_THEME`, `PIXEL_OFFICE_CONFIG`
-3. `~/.config/pixel-office/settings.toml`
+2. Environment variables: `TOMVILLE_FPS`, `TOMVILLE_STYLE`, `TOMVILLE_THEME`, `TOMVILLE_CONFIG`
+3. `~/.config/tomville/settings.toml`
 4. Built-in defaults
 
-So `--fps 30` tries 30 fps once, and `pixel-office config set fps 30` keeps it.
+So `--fps 30` tries 30 fps once, and `tomville config set fps 30` keeps it.
 
 ### Exit codes
 
@@ -348,18 +348,18 @@ Same convention as herdr, so scripts can check the result.
 ### Examples
 
 ```bash
-pixel-office                                   # open the office
-pxo --demo --theme game-boy                    # try it with fake agents
-pxo --style blocks --pet codex1=fox --fps 15   # one-off look
-pxo status                                     # quick text summary
-pxo status --watch 5                           # live summary in a small pane
-pxo status --json                              # for scripts and agents
-pxo doctor
-pxo pets new fox --from cat && pxo pets check fox
-pxo config set theme night
+tomville                                     # open the office
+tv --demo --theme game-boy                   # try it with fake agents
+tv --style blocks --pet codex1=fox --fps 15  # one-off look
+tv status                                    # quick text summary
+tv status --watch 5                          # live summary in a small pane
+tv status --json                             # for scripts and agents
+tv doctor
+tv pets new fox --from cat && tv pets check fox
+tv config set theme night
 ```
 
-`pxo status` output:
+`tv status` output:
 
 ```
 myproject · 3 agents · 3 tasks
@@ -374,13 +374,13 @@ myproject · 3 agents · 3 tasks
 Because `status --json` prints the team and board as JSON, Claude can read it with one command. An optional line for the `duo` skill:
 
 ```markdown
-- To see the whole team at once, run `pixel-office status --json`.
+- To see the whole team at once, run `tomville status --json`.
 ```
 
 ### Doctor
 
 ```
-Pixel Office doctor · v0.1.0
+Tomville doctor · v0.1.0
 
  Environment
   ✔ Python 3.12.3
@@ -400,8 +400,8 @@ Pixel Office doctor · v0.1.0
  Board
   ✔ TASKS.md found (3 tasks)
 
- Settings  ~/.config/pixel-office/settings.toml
- Sprites   ~/.config/pixel-office/sprites/ (1 custom pet)
+ Settings  ~/.config/tomville/settings.toml
+ Sprites   ~/.config/tomville/sprites/ (1 custom pet)
 
  1 problem found.
 ```
@@ -416,7 +416,7 @@ Kept small so it fits in two days.
 | --- | --- | --- |
 | Language | Python 3.11+ | Already on Ubuntu; `tomllib` built in |
 | Terminal UI | [Textual](https://textual.textualize.io/) + [Rich](https://rich.readthedocs.io/) | Layouts, touch, animation timers, 24-bit colour, `cell_len` for emoji width |
-| CLI | `argparse` (standard library) with subcommands; two entry points, `pixel-office` and `pxo` | Options and commands with built-in `--help`; no extra dependency |
+| CLI | `argparse` (standard library) with subcommands; two entry points, `tomville` and `tv` | Options and commands with built-in `--help`; no extra dependency |
 | Settings | TOML: `tomllib` to read, `tomli-w` to write | Human-editable, same format as Codex and herdr |
 | Agent status | `herdr agent list` (JSON via `subprocess`) | Uses the existing setup; no extra server |
 | Board | `TASKS.md`, re-read when its modified time changes | No file-watching library needed |
@@ -428,12 +428,12 @@ Dependencies: `textual` and `tomli-w` only.
 ## Project layout
 
 ```
-pixel-office/
+tomville/
   pyproject.toml
   README.md
   install.sh         # one-line installer (phase 2)
   CHANGELOG.md
-  src/pixel_office/
+  src/tomville/
     cli.py           # argparse: office options + status, doctor, setup, pets, theme, config
     core/            # shared by CLI and web; no UI code here
       poller.py      # herdr agent list + TASKS.md -> events
@@ -453,7 +453,7 @@ pixel-office/
   tests/
 ```
 
-User files live outside the package, so updates never overwrite them: `~/.config/pixel-office/settings.toml` and `~/.config/pixel-office/sprites/`.
+User files live outside the package, so updates never overwrite them: `~/.config/tomville/settings.toml` and `~/.config/tomville/sprites/`.
 
 ## Two-day plan
 
@@ -461,7 +461,7 @@ User files live outside the package, so updates never overwrite them: `~/.config
 
 | Block | Build | Done when |
 | --- | --- | --- |
-| Morning | Project skeleton, `pyproject.toml`, office map, Textual layout (office + Team + Board + Events) | `pixel-office` opens the empty office |
+| Morning | Project skeleton, `pyproject.toml`, office map, Textual layout (office + Team + Board + Events) | `tomville` opens the empty office |
 | Midday | Poller: `herdr agent list` + `TASKS.md` into events | Team list and board show real data |
 | Afternoon | World model: zones, status-to-behaviour table, cell-by-cell movement, fps option (`F`) | Pets walk to their desk when you start Claude or Codex |
 | Evening | Emoji and ASCII sprites, built-in cat, dog and sheep | Style switch (`S`) works; tests for the world model pass |
@@ -472,7 +472,7 @@ User files live outside the package, so updates never overwrite them: `~/.config
 | --- | --- | --- |
 | Morning | Block-pixel sprite format with palettes; custom pets folder; `pets list`, `pets show`, `pets new`, `pets check` | Your own fox walks around in its colours |
 | Midday | Themes (`T`), agent colours, emoji width check and calibration screen | Map stays aligned on the 11-inch screen |
-| Afternoon | CLI: office options, `status` (with `--json`, `--watch`), `doctor`, `setup`, `config`, `theme list`; `pxo` alias | `pxo status --json` and `pxo doctor` work; `--help` lists every option |
+| Afternoon | CLI: office options, `status` (with `--json`, `--watch`), `doctor`, `setup`, `config`, `theme list`; `tv` alias | `tv status --json` and `tv doctor` work; `--help` lists every option |
 | Evening | Tap to select, `Enter` to open the pane, idle power saving; install test with `uv tool install` from GitHub | Fresh install works end to end |
 
 If day 1 runs late, drop block-pixel sprites from day 2 first: emoji and ASCII are enough to use the app.
@@ -483,25 +483,25 @@ Each day ends with a usable app.
 
 ### Phase 2: publish the CLI (right after the weekend)
 
-Goal: anyone installs it with one line, updates with `pxo update`, the same experience as herdr.
+Goal: anyone installs it with one line, updates with `tv update`, the same experience as herdr.
 
 | Step | What | Done when |
 | --- | --- | --- |
-| 1. Name | Check `pixel-office` is free on PyPI; pick a licence (MIT suggested) | Name and `LICENSE` in the repo |
+| 1. Name | `tomville` is free on PyPI and GitHub (checked 2026-10-16); pick a licence (MIT suggested) | Name and `LICENSE` in the repo |
 | 2. Package | Version `0.1.0` in `pyproject.toml`, `CHANGELOG.md`, project links | `uv build` makes a wheel that installs cleanly |
-| 3. Installer | `install.sh`: checks OS and arch, installs `uv` if missing, runs `uv tool install pixel-office`, prints the PATH line if needed | Works on Ubuntu (x86_64 and aarch64), macOS, Termux PRoot |
-| 4. Update and uninstall | `pxo update` and `pxo uninstall` call `uv tool upgrade/uninstall` | Update from 0.1.0 to 0.1.1 works |
+| 3. Installer | `install.sh`: checks OS and arch, installs `uv` if missing, runs `uv tool install tomville`, prints the PATH line if needed | Works on Ubuntu (x86_64 and aarch64), macOS, Termux PRoot |
+| 4. Update and uninstall | `tv update` and `tv uninstall` call `uv tool upgrade/uninstall` | Update from 0.1.0 to 0.1.1 works |
 | 5. CI | GitHub Actions: lint and tests on every push | Green check on `main` |
-| 6. Release | Push tag `v0.1.0` → Actions builds, publishes to PyPI (trusted publishing, no token) and creates a GitHub Release with the changelog | `uv tool install pixel-office` works on a clean machine |
+| 6. Release | Push tag `v0.1.0` → Actions builds, publishes to PyPI (trusted publishing, no token) and creates a GitHub Release with the changelog | `uv tool install tomville` works on a clean machine |
 | 7. Go public | Make the repo public; README starts with the one-line install | The install line works for anyone |
 
 How it compares to herdr:
 
-| | herdr | Pixel Office |
+| | herdr | Tomville |
 | --- | --- | --- |
-| One-line install | `curl -fsSL https://herdr.dev/install.sh \| sh` | `curl -fsSL https://raw.githubusercontent.com/DuongAnh1201/pixel-office/main/install.sh \| sh` |
+| One-line install | `curl -fsSL https://herdr.dev/install.sh \| sh` | `curl -fsSL https://raw.githubusercontent.com/DuongAnh1201/tomville/main/install.sh \| sh` |
 | What it installs | A Rust binary per platform | A Python app via `uv`, any platform with Python 3.11+ |
-| Self-update | `herdr update` | `pxo update` |
+| Self-update | `herdr update` | `tv update` |
 | Releases | GitHub Releases | GitHub Releases + PyPI |
 
 A short install domain (like `herdr.dev`) and standalone binaries without Python are optional extras for later.
@@ -512,7 +512,7 @@ The same office in a browser, for a bigger screen or to watch from another devic
 
 | Step | What |
 | --- | --- |
-| 1. Quick version | `pxo web` runs the existing Textual app in the browser with `textual serve`. Almost no new code |
+| 1. Quick version | `tv web` runs the existing Textual app in the browser with `textual serve`. Almost no new code |
 | 2. Real web UI | A small server (FastAPI) streams world events from `core/` over a WebSocket; the page draws pets on a pixel canvas, with real pixel art instead of characters |
 | 3. Extras | Drag-and-drop board, pet editor in the browser, view from a phone on the same Wi-Fi |
 
@@ -528,7 +528,7 @@ Rules for phase 1 that keep phase 3 easy:
 - Prompt box that sends tasks to the lead (`herdr agent prompt claude "..."`).
 - GitHub Projects board instead of `TASKS.md`.
 - Full setup wizard with live previews; more themes.
-- Shell tab-completion (`pixel-office completion bash|zsh|fish`).
+- Shell tab-completion (`tomville completion bash|zsh|fish`).
 
 ## Risks
 
@@ -539,11 +539,12 @@ Rules for phase 1 that keep phase 3 easy:
 | Battery drain under PRoot | Tablet gets warm | 10 fps default; auto 2 fps when idle; 5 fps saver |
 | Polling herdr every second costs CPU | Slower agents | Raise `poll_seconds` to 2–3 (`--poll 3`) |
 | Repo stays private | Others cannot install it | Phase 2, step 7: make it public |
-| `pixel-office` is taken on PyPI | Cannot publish under that name | Pick another name before phase 2; keep `pxo` as the command |
 | `install.sh` runs on unknown machines | Install fails or surprises users | Script stays short and readable; it only installs `uv` and the app |
 
 ## Decided
 
+- Name: Tomville. Command `tomville`, short alias `tv`; settings in `~/.config/tomville/`.
+- Tomville builds on top of herdr, not as a replacement. herdr still runs the panes, sessions and agent status; Tomville reads that status and draws it, running in its own herdr tab.
 - v1 is watch-only; the prompt box comes later.
 - Built-in pets: cat, dog, sheep. Built-in themes: night, game-boy, green-screen.
 - Landscape first; portrait stacks the sidebar under the office.
@@ -552,4 +553,3 @@ Rules for phase 1 that keep phase 3 easy:
 
 - [ ] Which pet and colour for each agent?
 - [ ] Licence: MIT, or another?
-- [ ] Package name, if `pixel-office` is taken on PyPI.
