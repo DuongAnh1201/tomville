@@ -58,19 +58,25 @@ Done 2026-10-17 · PR #11
 
 ## M2 · Event reader (real data)
 
-- [ ] Read `herdr agent list` once at start into a typed model
-- [ ] Subscribe to herdr's event stream (`pane.agent_status_changed`, `pane.agent_detected`, `pane.closed`)
-- [ ] Fall back to polling every `poll_seconds` when the stream drops
-- [ ] Board plug-in interface (`board/`), chosen by `[board] source`
-- [ ] GitHub Issues source (default): `gh api` with `ETag`, every `check_seconds`; labels → columns and agents
-- [ ] `check_seconds` setting, `--board-check SEC`, `G` key to cycle 15/30/60/120 s
-- [ ] Offline: keep last cards, show `offline since …`
-- [ ] `TASKS.md` source: re-read on modified time
-- [ ] Turn all of it into app events ("codex1 became blocked", "T1 moved to review")
-- [ ] Team list and Board show live data; Events panel logs changes
-- [ ] Tests use recorded herdr and GitHub JSON, with no herdr or network
+- [x] Read `herdr agent list` once at start into a typed model
+- [x] Subscribe to herdr's event stream (`pane.agent_status_changed`, `pane.agent_detected`, `pane.closed`)
+- [x] Fall back to polling every `poll_seconds` when the stream drops
+- [x] Board plug-in interface (`board/`), chosen by `[board] source`
+- [x] GitHub Issues source (default): `gh api` with `ETag`, every `check_seconds`; labels → columns and agents
+- [x] `check_seconds` setting, `--board-check SEC`, `G` key to cycle 15/30/60/120 s
+- [x] Offline: keep last cards, show `offline since …`
+- [x] `TASKS.md` source: re-read on modified time
+- [x] Turn all of it into app events ("codex1 became blocked", "T1 moved to review")
+- [x] Team list and Board show live data; Events panel logs changes
+- [x] Tests use recorded herdr and GitHub JSON, with no herdr or network
 
 **Check:** start Codex in another herdr pane: it appears in the Team list within 2 s, and its status changes show up live. Add `status:doing` to an issue on GitHub: the card moves within `check_seconds`. Switch to `source = "tasks-md"`: the board reads the file instead.
+
+Validation 2026-10-17: 18 tests pass. Live headless app loaded the running Codex, observed a GitHub label move within 10 s, and loaded the Markdown source. No live status transition occurred during the observation window; socket lifecycle/status/disconnect paths are covered offline. Lead must finish the visual start/status Check before marking M2 done.
+
+Lead Check 2026-10-17: ran this branch in its own herdr tab. The Team panel showed claude, codex1 and claude2 at start; the Events panel logged live changes ("claude became idle", "claude2 became done").
+
+Done 2026-10-17 · PR #15
 
 ## M3 · World model and lead + workers
 

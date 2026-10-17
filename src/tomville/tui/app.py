@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime
+from rich.text import Text
+
+from tomville.core.events import EventReader
+from tomville.core.models import AgentAppeared, AgentLeft, AgentStatusChanged, CardChanged, CardRemoved, BoardOffline, BoardOnline, Column
+from tomville.core.settings import load_reader_settings
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -25,6 +31,16 @@ class TeamPanel(Static):
         self.update("No agents yet")
 
 
+class BoardPanel(Static):
+    DEFAULT_CSS = """
+    BoardPanel { height: auto; max-height: 15; border: round $secondary; padding: 0 1; }
+    """
+
+    def on_mount(self):
+        self.border_title = "Board"
+        self.update("No cards yet")
+
+
 class EventsPanel(RichLog):
     DEFAULT_CSS = """
     EventsPanel { height: 1fr; border: round $secondary; }
@@ -44,14 +60,17 @@ class TomvilleApp(App):
     """
 
     BINDINGS = [
+        Binding("g", "board_interval", "Board interval"),
         Binding("q", "quit", "Quit"),
         Binding("question_mark", "help", "Help", key_display="?"),
     ]
 
-    def __init__(self, project: Path | None = None, ville: str = "Tomville") -> None:
+    def __init__(self, project: Path | None = None, ville: str = "Tomville", settings=None, live: bool = True) -> None:
         super().__init__()
         self.project = (project or Path.cwd()).resolve()
         self.ville = ville
+        self.reader = EventReader(self.project, settings or load_reader_settings(self.project))
+        self.live = live
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -59,6 +78,7 @@ class TomvilleApp(App):
             yield OfficeView()
             with Vertical(id="sidebar"):
                 yield TeamPanel()
+                yield BoardPanel()
                 yield EventsPanel()
         yield Footer()
 
@@ -66,6 +86,8 @@ class TomvilleApp(App):
         self.title = f"{self.ville} · {self.project.name}"
         self._apply_layout(self.size.width)
         self.query_one(EventsPanel).write("Office open. Waiting for agents…")
+        if self.live:
+            self.run_worker(self.reader.run(self.apply_event), name="live-data")
 
     def on_resize(self, event) -> None:
         self._apply_layout(event.size.width)
@@ -74,4 +96,38 @@ class TomvilleApp(App):
         self.query_one("#main").set_class(width < PORTRAIT_BELOW, "portrait")
 
     def action_help(self) -> None:
-        self.notify("q quit · ? help. More keys arrive with later milestones.", title="Keys")
+        self.notify("q quit · G board interval · ? help.", title="Keys")
+
+    def action_board_interval(self):
+        choices = (15, 30, 60, 120)
+        current = self.reader.settings.check_seconds
+        self.reader.settings.check_seconds = next((n for n in choices if n > current), choices[0])
+        self.reader.board_wake.set()
+        self.query_one(BoardPanel).border_title = f"Board · {self.reader.settings.check_seconds:g} s"
+        self.notify(f"Board check: {self.reader.settings.check_seconds} s")
+
+    def apply_event(self, event):
+        if isinstance(event, AgentAppeared):
+            message = f"{event.agent.name} appeared ({event.agent.status})"
+        elif isinstance(event, AgentStatusChanged):
+            message = f"{event.name} became {event.new}"
+        elif isinstance(event, AgentLeft):
+            message = f"{event.name} left"
+        elif isinstance(event, CardChanged):
+            message = f"{event.card.id} → {event.card.column}" + (f" ({event.card.agent})" if event.card.agent else "")
+        elif isinstance(event, CardRemoved):
+            message = f"{event.id} removed"
+        elif isinstance(event, BoardOffline):
+            message = f"Board offline since {event.since:%H:%M:%S}"
+        elif isinstance(event, BoardOnline):
+            message = "Board online"
+        else:
+            return
+        self.query_one(EventsPanel).write(Text(f"{datetime.now():%H:%M:%S} {message}"))
+        self.query_one(TeamPanel).update(Text("\n".join(f"{a.name}  {a.kind}  {a.status}" for a in self.reader.agents.values()) or "No agents yet"))
+        board = self.query_one(BoardPanel)
+        board.border_title = f"Board · {self.reader.settings.check_seconds:g} s"
+        text = "\n".join(f"{c.id} {c.column} {c.title}" + (f" ({c.agent})" if c.agent else "") for c in sorted(self.reader.cards.values(), key=lambda c: list(Column).index(c.column))) or "No cards yet"
+        if self.reader.offline_since:
+            text = f"offline since {self.reader.offline_since:%H:%M:%S} UTC\n" + text
+        board.update(Text(text))
