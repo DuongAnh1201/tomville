@@ -261,3 +261,27 @@ def test_still_comes_from_settings():
 
     assert make_world(OfficeSettings(still=True)).still
     assert not make_world(OfficeSettings()).still
+
+
+def test_blocked_pet_never_jumps_onto_a_desk_or_wall():
+    names = ["codex1", "codex2", "codex3"]
+    w = make(agent("claude", Status.BLOCKED, "claude"), *[agent(n, Status.BLOCKED) for n in names])
+    for _ in range(40):  # two full jump cycles
+        w.tick(0.1)
+        for a in w.appearances():
+            assert (a.x, a.y) not in w._blocked and (a.x + 1, a.y) not in w._blocked, a
+    # A worker has room above its seat and jumps; the boss has a wall above and
+    # its desk below, so it stays put.
+    rows = {n: set() for n in ["claude", *names]}
+    for _ in range(20):
+        w.tick(0.1)
+        for a in w.appearances():
+            rows[a.name].add(a.y)
+    assert len(rows["codex1"]) == 2
+    assert rows["claude"] == {w.pets["claude"].cell[1]}
+
+
+def test_jump_stays_put_when_there_is_no_room():
+    w = make(agent("codex1", Status.BLOCKED))
+    w._blocked |= {(x, y) for x in range(128) for y in range(30)}  # boxed in
+    assert w._jump_to(10, 10) == 10
