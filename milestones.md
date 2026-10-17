@@ -94,7 +94,7 @@ Done 2026-10-17 · PR #15
 
 **Check:** start Claude or Codex: its pet walks to its named desk; a `blocked` agent jumps with `❗`; an agent that exits walks out the door. Label an issue `agent:codex1`: the boss walks to codex1's desk and the bubbles appear in order.
 
-Checked with fake events (`tests/test_world.py`, `tests/test_app.py`); the live check with real herdr agents and issues waits for M2, so no `Done` line yet.
+Checked with fake events (`tests/test_world.py`, `tests/test_app.py`) and live in a herdr tab: claude, codex1 and claude2 sit at their desks and the board shows real cards. The live `blocked`, exit and `agent:` label steps are not run yet, so no `Done` line.
 
 ## M4 · Sprites
 
