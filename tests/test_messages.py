@@ -154,3 +154,19 @@ def test_unknown_sender_shows_a_question_mark_on_the_receiver():
     world.apply(MessageSent(msg(None, 'claude2', 'Take #4')))
     assert world.appearance(world.pets['claude2']).bubble == '? ✉ Take #4'
     assert not world.pets['claude'].script
+
+
+def test_events_panel_shows_who_sent_what(tmp_path):
+    from tomville.tui.app import EventsPanel, TomvilleApp
+
+    async def run():
+        app = TomvilleApp(project=tmp_path, settings=ReaderSettings(source='tasks-md'), live=False)
+        async with app.run_test(size=(140, 40)) as pilot:
+            app.handle_event(MessageSent(msg('claude', 'codex1', 'Fix the login test')))
+            app.handle_event(MessageSent(msg(None, 'claude2', 'Take #4')))
+            await pilot.pause()
+            return [str(line.text) for line in app.query_one(EventsPanel).lines]
+
+    lines = asyncio.run(run())
+    assert any(line.endswith('claude → codex1: Fix the login test') for line in lines)
+    assert any(line.endswith('? → claude2: Take #4') for line in lines)
