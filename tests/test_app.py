@@ -117,3 +117,68 @@ def test_start_up_snapshot_places_pets_without_handover(tmp_path, monkeypatch):
         return [a.name for a in team]
 
     asyncio.run(run())
+
+
+def _rows(app):
+    from tomville.tui.office import OfficeView
+
+    return app.query_one(OfficeView).render().plain.split("\n")
+
+
+def test_demo_shows_three_animated_pets_and_s_switches_style_without_shifting_the_map(tmp_path):
+    from rich.cells import cell_len
+
+    from tomville.core.settings import OfficeSettings
+    from tomville.core.sprites import load_frames
+
+    async def run():
+        app = TomvilleApp(project=tmp_path, settings=OfficeSettings(demo=True), live=False, fps=30)
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.pause(0.3)
+            assert set(app.world.pets) == {"claude", "codex1", "codex2"}
+            app._frame_timer.stop()  # same moment in both renders: blocked pets jump and blink
+            emoji = _rows(app)
+            await pilot.press("s")
+            ascii_ = _rows(app)
+            return app.sprites.style, emoji, ascii_
+
+    style, emoji, ascii_ = asyncio.run(run())
+    assert style == "ascii"
+    text, plain = "".join(emoji), "".join(ascii_)
+    assert any(f in text for f in load_frames("cat", "emoji")) and any(f in text for f in load_frames("dog", "emoji"))
+    assert any(f in plain for f in load_frames("cat", "ascii")) and any(f in plain for f in load_frames("dog", "ascii"))
+    assert len(emoji) == len(ascii_)
+    for a, b in zip(emoji, ascii_):
+        assert cell_len(a) == cell_len(b)
+        for pet in ("cat", "dog", "sheep"):
+            for f in load_frames(pet, "emoji"):
+                a = a.replace(f, "  ")
+            for f in load_frames(pet, "ascii"):
+                b = b.replace(f, "  ")
+        assert a == b
+
+
+def test_working_pet_animates():
+    from tomville.core.models import Agent, Status
+    from tomville.core.world import World
+    from tomville.core.sprites import Sprites
+    from tomville.tui.office import OfficeView
+
+    world = World()
+    world.resize(128, 30)
+    world.load([Agent("claude", "claude", Status.WORKING, "p1"), Agent("codex1", "codex", Status.IDLE, "p2")], [])
+    view = OfficeView(world, Sprites())
+    seen = set()
+    for _ in range(12):
+        world.tick(0.1)
+        seen.add(tuple(view._overlays()[world.pets["claude"].cell[1]][0][1:2]))
+    assert len(seen) == 2  # both frames of the cat
+
+
+def test_cli_rejects_bad_pets(capsys):
+    for args in (["--pet", "codex1"], ["--pet", "codex1=fox"]):
+        with pytest.raises(SystemExit) as exit:
+            main(args)
+        assert exit.value.code == 2
+    err = capsys.readouterr().err
+    assert "AGENT=PET" in err and "unknown pet" in err

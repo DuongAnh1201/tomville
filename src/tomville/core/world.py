@@ -76,6 +76,7 @@ class Appearance:
     y: int  # already includes the jump of a blocked pet
     mark: str  # shown after the name: "❗", "?", "z z", a task id, or ""
     bubble: str | None
+    moving: bool = False
 
     @property
     def label(self) -> str:
@@ -221,7 +222,7 @@ class World:
         elif pet.status is Status.WORKING:
             mark = self.task_of(pet.name) or ""
         bubble = pet.bubbles[0][0] if pet.bubbles else None
-        return Appearance(pet.name, pet.kind, pet.status, x, y, mark, bubble)
+        return Appearance(pet.name, pet.kind, pet.status, x, y, mark, bubble, bool(pet.path))
 
     def bubble_rect(self, name: str) -> Rect | None:
         """Where `name`'s bubble goes: inside the office, over no pet and no name."""
@@ -230,7 +231,7 @@ class World:
             return None
         apps = self.appearances()
         me = next(a for a in apps if a.name == name)
-        taken = [Rect(a.x, a.y, 1, 1) for a in apps]
+        taken = [Rect(a.x, a.y, 2, 1) for a in apps]  # a sprite is 2 cells wide
         taken += [_label_rect(a) for a in apps if a.name != name]
         taken.append(_label_rect(me))
         text = f" {me.bubble[:MAX_BUBBLE]} "

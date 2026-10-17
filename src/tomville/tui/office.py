@@ -8,10 +8,10 @@ from textual.widget import Widget
 
 from tomville.core.models import Status
 from tomville.core.shapes import OfficeMap
+from tomville.core.sprites import Sprites
 from tomville.core.world import World
 
-# One letter per agent kind until sprites arrive (M4).
-GLYPHS = {"claude": "C", "codex": "X"}
+ANIM_HZ = 4  # sprite frames per second, whatever the frame rate
 STATUS_STYLE = {
     Status.WORKING: "bold green",
     Status.BLOCKED: "bold red",
@@ -30,9 +30,10 @@ class OfficeView(Widget):
     }
     """
 
-    def __init__(self, world: World | None = None, **kwargs) -> None:
+    def __init__(self, world: World | None = None, sprites: Sprites | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self.world = world or World()
+        self.sprites = sprites or Sprites()
 
     @property
     def office(self) -> OfficeMap | None:
@@ -74,7 +75,10 @@ class OfficeView(Widget):
         apps = self.world.appearances()
         for a in apps:
             style = STATUS_STYLE[a.status]
-            put(a.x, a.y, GLYPHS.get(a.kind, a.kind[:1].upper() or "?"), style)
+            frames = self.sprites.frames(a.name, a.kind)
+            moving = a.moving or a.status is Status.WORKING
+            frame = frames[int(self.world.time * ANIM_HZ) % len(frames)] if moving else frames[0]
+            put(a.x, a.y, frame, style)
             put(a.x + 2, a.y, a.label, "dim" if a.status is not Status.BLOCKED else style)
         for a in apps:
             rect = self.world.bubble_rect(a.name)
