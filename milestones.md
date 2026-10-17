@@ -36,10 +36,11 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 - [x] Add `workflow` scope to `gh` (`gh auth refresh -s workflow`), needed before CI
 - [x] Add Claude Code permission allow rules for `git`, `gh`, `uv`, `herdr`
 - [x] Create board labels on the repo: `status:todo`, `status:doing`, `status:review`, `agent:claude`, `agent:codex1`, `bug`, `idea`
-- [ ] Note in [idea.md](idea.md) what `herdr agent list` shows for a named agent (`herdr agent start codex1 --kind codex --pane …`)
-  Waiting: done when the workers start in Phase C.
+- [x] Note in [idea.md](idea.md) what `herdr agent list` shows for a named agent (`herdr agent start codex1 --kind codex --pane …`)
 
 **Check:** `uv --version`, `gh auth status` lists `workflow`, and `herdr agent list` shows this agent.
+
+Done 2026-10-17 · PR #13
 
 ## M1 · Skeleton and empty office
 
