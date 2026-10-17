@@ -80,17 +80,21 @@ Done 2026-10-17 · PR #15
 
 ## M3 · World model and lead + workers
 
-- [ ] Zones and the status-to-behaviour table from the README
-- [ ] Cell-by-cell movement around walls; speed in cells per second, independent of fps
-- [ ] Frame rate option and `F` key (5/10/15/30)
-- [ ] Team-shape interface in the world model, so Part 2 shapes plug in without changing the core
-- [ ] Lead + workers shape: lead at the front desk; `[team] lead` setting
-- [ ] Handover as in [idea.md](idea.md#lead--workers-layout): boss walks to the worker's desk, bubble "#12 is yours", worker "checking issues…", then "on it: #12" when it takes the issue (or a `doing` row in `TASKS.md`)
-- [ ] Conversation bubbles: show for a few seconds, never cover another pet's name
-- [ ] Done: worker walks to the boss desk, bubble "#12 ready for review"
-- [ ] Unit tests for the world model with fake events
+- [x] Zones and the status-to-behaviour table from the README
+- [x] Cell-by-cell movement around walls; speed in cells per second, independent of fps
+- [x] Frame rate option and `F` key (5/10/15/30)
+  `--fps` and `F` work; saving the choice waits for `settings.toml` (M6).
+- [x] Team-shape interface in the world model, so Part 2 shapes plug in without changing the core
+- [x] Lead + workers shape: lead at the front desk; `[team] lead` setting
+  `--lead` for now; `settings.toml` arrives in M6.
+- [x] Handover as in [idea.md](idea.md#lead--workers-layout): boss walks to the worker's desk, bubble "#12 is yours", worker "checking issues…", then "on it: #12" when it takes the issue (or a `doing` row in `TASKS.md`)
+- [x] Conversation bubbles: show for a few seconds, never cover another pet's name
+- [x] Done: worker walks to the boss desk, bubble "#12 ready for review"
+- [x] Unit tests for the world model with fake events
 
 **Check:** start Claude or Codex: its pet walks to its named desk; a `blocked` agent jumps with `❗`; an agent that exits walks out the door. Label an issue `agent:codex1`: the boss walks to codex1's desk and the bubbles appear in order.
+
+Checked with fake events (`tests/test_world.py`, `tests/test_app.py`) and live in a herdr tab: claude, codex1 and claude2 sit at their desks and the board shows real cards. The live `blocked`, exit and `agent:` label steps are not run yet, so no `Done` line.
 
 ## M4 · Sprites
 

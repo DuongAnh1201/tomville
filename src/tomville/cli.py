@@ -19,6 +19,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--board", help="github, tasks-md, or Markdown file path")
     p.add_argument("--board-check", type=float, metavar="SEC", help="GitHub board interval (minimum 10; default 60)")
     p.add_argument("--poll", type=float, metavar="SEC", help="fallback polling interval (default 1)")
+    p.add_argument("--fps", type=int, choices=(5, 10, 15, 30), default=10, help="frame rate for this run (default: 10)")
+    p.add_argument("--lead", default="claude", metavar="AGENT", help="who sits at the front desk (default: claude)")
     return p
 
 
@@ -34,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
         settings = load_reader_settings(args.project or Path.cwd(), config=args.config, source=args.board, check_seconds=args.board_check, poll_seconds=args.poll)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
-    TomvilleApp(project=args.project, settings=settings).run()
+    TomvilleApp(project=args.project, settings=settings, lead=args.lead, fps=args.fps).run()
     return 0
 
 
