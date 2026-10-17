@@ -31,12 +31,13 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 
 ## M0 · Setup
 
-- [ ] Install `uv` (`curl -LsSf https://astral.sh/uv/install.sh | sh`); `uv --version` works
-- [ ] Python 3.11+ available to `uv` (tablet has 3.14.4)
-- [ ] Add `workflow` scope to `gh` (`gh auth refresh -s workflow`), needed before CI
-- [ ] Add Claude Code permission allow rules for `git`, `gh`, `uv`, `herdr`
-- [ ] Create board labels on the repo: `status:todo`, `status:doing`, `status:review`, `agent:claude`, `agent:codex1`, `bug`, `idea`
+- [x] Install `uv` (`curl -LsSf https://astral.sh/uv/install.sh | sh`); `uv --version` works
+- [x] Python 3.11+ available to `uv` (tablet has 3.14.4)
+- [x] Add `workflow` scope to `gh` (`gh auth refresh -s workflow`), needed before CI
+- [x] Add Claude Code permission allow rules for `git`, `gh`, `uv`, `herdr`
+- [x] Create board labels on the repo: `status:todo`, `status:doing`, `status:review`, `agent:claude`, `agent:codex1`, `bug`, `idea`
 - [ ] Note in [idea.md](idea.md) what `herdr agent list` shows for a named agent (`herdr agent start codex1 --kind codex --pane …`)
+  Waiting: done when the workers start in Phase C.
 
 **Check:** `uv --version`, `gh auth status` lists `workflow`, and `herdr agent list` shows this agent.
 
@@ -209,6 +210,7 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-17: Issues #1–#6 opened, one per milestone M1–M6, as the board for this build. `AGENTS.md` and `CLAUDE.md` added with the team rules.
 - 2026-10-17: First run is "create a new ville" (`tmv new`, saved in `.tomville/ville.toml`). Lead + workers layout designed: boss on top with the board, named worker desks facing it, handover with bubbles (M1, M3, M6).
 - 2026-10-17: Pixel-art pets from online sets (`pets import`, big mode, pet gallery) saved as a later update in [idea.md](idea.md#later-updates); not in any milestone. Pets stay built-in for now.
 - 2026-10-17: GitHub Issues is the main board (plug-in, `TASKS.md` as the alternative); user-chosen `check_seconds`; `tmv task` commands; agent rules 8 and 9.
