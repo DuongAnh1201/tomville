@@ -15,9 +15,9 @@ Two ways to use it, built in this order:
 
 | Phase | What | When |
 | --- | --- | --- |
-| 1. CLI | `tomville` / `tv`: the office in the terminal, plus one-shot commands | The two-day weekend build |
+| 1. CLI | `tomville` / `tmv`: the office in the terminal, plus one-shot commands | The two-day weekend build |
 | 2. Publish | One-line install, like herdr: `curl -fsSL …/install.sh \| sh`, plus PyPI | Right after the weekend |
-| 3. Web UI | The same office in a browser: `tv web` | Later |
+| 3. Web UI | The same office in a browser: `tmv web` | Later |
 
 Both the CLI and the web UI use one shared core (status poller, world model, sprites, settings), so the web UI adds a new front end, not a second app. See [Roadmap](#roadmap).
 
@@ -85,7 +85,7 @@ When the lead assigns a task (a new `doing` row in `TASKS.md`), the lead pet wal
 | World model | Holds each pet's position, target zone and current animation. Events change targets; it does not draw anything |
 | Movement | Each tick, a pet steps one cell toward its target: first along x, then along y, around walls |
 | Renderer | A Textual widget that draws the office map, then each pet's current frame at its position. Textual only redraws changed cells |
-| Settings | `settings.toml`, changed in the app with hotkeys or from the shell with `tv config set` |
+| Settings | `settings.toml`, changed in the app with hotkeys or from the shell with `tmv config set` |
 
 The renderer never calls herdr directly, and the poller never draws. That keeps the game part testable with fake events and no agents running.
 
@@ -256,7 +256,7 @@ Or, for people who already use Python tools:
 uv tool install tomville     # or: pipx install tomville
 ```
 
-Update with `tv update`; remove with `tv uninstall`. Settings in `~/.config/tomville/` stay.
+Update with `tmv update`; remove with `tmv uninstall`. Settings in `~/.config/tomville/` stay.
 
 During the weekend build (phase 1), install straight from GitHub:
 
@@ -269,7 +269,7 @@ While the repo is private, this works only where `gh` is logged in with access, 
 
 ## CLI
 
-`tomville` works like `claude` and `codex`: run it bare for the interactive app, add options to change how it runs, or use a command for a one-shot job that prints and exits. The installer also adds a short alias, `tv`.
+`tomville` works like `claude` and `codex`: run it bare for the interactive app, add options to change how it runs, or use a command for a one-shot job that prints and exits. The installer also adds a short alias, `tmv`.
 
 ```
 tomville [options]              open the office (interactive)
@@ -348,18 +348,18 @@ Same convention as herdr, so scripts can check the result.
 ### Examples
 
 ```bash
-tomville                                     # open the office
-tv --demo --theme game-boy                   # try it with fake agents
-tv --style blocks --pet codex1=fox --fps 15  # one-off look
-tv status                                    # quick text summary
-tv status --watch 5                          # live summary in a small pane
-tv status --json                             # for scripts and agents
-tv doctor
-tv pets new fox --from cat && tv pets check fox
-tv config set theme night
+tomville                                      # open the office
+tmv --demo --theme game-boy                   # try it with fake agents
+tmv --style blocks --pet codex1=fox --fps 15  # one-off look
+tmv status                                    # quick text summary
+tmv status --watch 5                          # live summary in a small pane
+tmv status --json                             # for scripts and agents
+tmv doctor
+tmv pets new fox --from cat && tmv pets check fox
+tmv config set theme night
 ```
 
-`tv status` output:
+`tmv status` output:
 
 ```
 myproject · 3 agents · 3 tasks
@@ -416,7 +416,7 @@ Kept small so it fits in two days.
 | --- | --- | --- |
 | Language | Python 3.11+ | Already on Ubuntu; `tomllib` built in |
 | Terminal UI | [Textual](https://textual.textualize.io/) + [Rich](https://rich.readthedocs.io/) | Layouts, touch, animation timers, 24-bit colour, `cell_len` for emoji width |
-| CLI | `argparse` (standard library) with subcommands; two entry points, `tomville` and `tv` | Options and commands with built-in `--help`; no extra dependency |
+| CLI | `argparse` (standard library) with subcommands; two entry points, `tomville` and `tmv` | Options and commands with built-in `--help`; no extra dependency |
 | Settings | TOML: `tomllib` to read, `tomli-w` to write | Human-editable, same format as Codex and herdr |
 | Agent status | `herdr agent list` (JSON via `subprocess`) | Uses the existing setup; no extra server |
 | Board | `TASKS.md`, re-read when its modified time changes | No file-watching library needed |
@@ -472,7 +472,7 @@ User files live outside the package, so updates never overwrite them: `~/.config
 | --- | --- | --- |
 | Morning | Block-pixel sprite format with palettes; custom pets folder; `pets list`, `pets show`, `pets new`, `pets check` | Your own fox walks around in its colours |
 | Midday | Themes (`T`), agent colours, emoji width check and calibration screen | Map stays aligned on the 11-inch screen |
-| Afternoon | CLI: office options, `status` (with `--json`, `--watch`), `doctor`, `setup`, `config`, `theme list`; `tv` alias | `tv status --json` and `tv doctor` work; `--help` lists every option |
+| Afternoon | CLI: office options, `status` (with `--json`, `--watch`), `doctor`, `setup`, `config`, `theme list`; `tmv` alias | `tmv status --json` and `tmv doctor` work; `--help` lists every option |
 | Evening | Tap to select, `Enter` to open the pane, idle power saving; install test with `uv tool install` from GitHub | Fresh install works end to end |
 
 If day 1 runs late, drop block-pixel sprites from day 2 first: emoji and ASCII are enough to use the app.
@@ -483,14 +483,14 @@ Each day ends with a usable app.
 
 ### Phase 2: publish the CLI (right after the weekend)
 
-Goal: anyone installs it with one line, updates with `tv update`, the same experience as herdr.
+Goal: anyone installs it with one line, updates with `tmv update`, the same experience as herdr.
 
 | Step | What | Done when |
 | --- | --- | --- |
 | 1. Name | `tomville` is free on PyPI and GitHub (checked 2026-10-16); pick a licence (MIT suggested) | Name and `LICENSE` in the repo |
 | 2. Package | Version `0.1.0` in `pyproject.toml`, `CHANGELOG.md`, project links | `uv build` makes a wheel that installs cleanly |
 | 3. Installer | `install.sh`: checks OS and arch, installs `uv` if missing, runs `uv tool install tomville`, prints the PATH line if needed | Works on Ubuntu (x86_64 and aarch64), macOS, Termux PRoot |
-| 4. Update and uninstall | `tv update` and `tv uninstall` call `uv tool upgrade/uninstall` | Update from 0.1.0 to 0.1.1 works |
+| 4. Update and uninstall | `tmv update` and `tmv uninstall` call `uv tool upgrade/uninstall` | Update from 0.1.0 to 0.1.1 works |
 | 5. CI | GitHub Actions: lint and tests on every push | Green check on `main` |
 | 6. Release | Push tag `v0.1.0` → Actions builds, publishes to PyPI (trusted publishing, no token) and creates a GitHub Release with the changelog | `uv tool install tomville` works on a clean machine |
 | 7. Go public | Make the repo public; README starts with the one-line install | The install line works for anyone |
@@ -501,7 +501,7 @@ How it compares to herdr:
 | --- | --- | --- |
 | One-line install | `curl -fsSL https://herdr.dev/install.sh \| sh` | `curl -fsSL https://raw.githubusercontent.com/DuongAnh1201/tomville/main/install.sh \| sh` |
 | What it installs | A Rust binary per platform | A Python app via `uv`, any platform with Python 3.11+ |
-| Self-update | `herdr update` | `tv update` |
+| Self-update | `herdr update` | `tmv update` |
 | Releases | GitHub Releases | GitHub Releases + PyPI |
 
 A short install domain (like `herdr.dev`) and standalone binaries without Python are optional extras for later.
@@ -512,7 +512,7 @@ The same office in a browser, for a bigger screen or to watch from another devic
 
 | Step | What |
 | --- | --- |
-| 1. Quick version | `tv web` runs the existing Textual app in the browser with `textual serve`. Almost no new code |
+| 1. Quick version | `tmv web` runs the existing Textual app in the browser with `textual serve`. Almost no new code |
 | 2. Real web UI | A small server (FastAPI) streams world events from `core/` over a WebSocket; the page draws pets on a pixel canvas, with real pixel art instead of characters |
 | 3. Extras | Drag-and-drop board, pet editor in the browser, view from a phone on the same Wi-Fi |
 
@@ -543,7 +543,7 @@ Rules for phase 1 that keep phase 3 easy:
 
 ## Decided
 
-- Name: Tomville. Command `tomville`, short alias `tv`; settings in `~/.config/tomville/`.
+- Name: Tomville. Command `tomville`, short alias `tmv`; settings in `~/.config/tomville/`.
 - Tomville builds on top of herdr, not as a replacement. herdr still runs the panes, sessions and agent status; Tomville reads that status and draws it, running in its own herdr tab.
 - v1 is watch-only; the prompt box comes later.
 - Built-in pets: cat, dog, sheep. Built-in themes: night, game-boy, green-screen.
