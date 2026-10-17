@@ -68,6 +68,58 @@ In portrait, the sidebar moves under the office floor.
 
 When the lead assigns a task (a new `doing` row in `TASKS.md`), the lead pet walks to the worker's desk and hands over a card.
 
+## Team shapes
+
+herdr has no idea of a "team": any agent can prompt any other. Tomville supports two common shapes in v1 and draws a different office for each. You pick the shape in `settings.toml` or with `--team`.
+
+### 1. Lead + workers (default)
+
+One lead hands tasks to workers. The office in [What it looks like](#what-it-looks-like) is this shape: the lead sits at the front desk, workers at the desks around it.
+
+| What happens | How Tomville knows | What you see |
+| --- | --- | --- |
+| Lead gives a worker a task | A new `doing` row in `TASKS.md` with that worker's name | Lead pet walks to the worker's desk and hands over a card |
+| Worker finishes | Worker goes `working` → `done` | Worker carries the card to the review zone |
+| Lead reviews | Card moves to `review`/`done` in `TASKS.md` | Card moves on the board; lead pet visits the review zone |
+
+### 2. Pipeline
+
+Each agent does one step and passes the work on, for example planner → coder → tester. The office is a row of stations joined by a conveyor belt:
+
+```
+ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+ ▓   PLAN            CODE             TEST             DONE  ▓
+ ▓   ┌──┐            ┌──┐             ┌──┐             ┌──┐  ▓
+ ▓   └──┘            └──┘             └──┘             └──┘  ▓
+ ▓   🐱 z z          🐶⌨               🐑❗                     ▓
+ ▓  ═════▶══════════[T1]▶═════════════▶════════════════▶═══  ▓
+ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+```
+
+| What happens | How Tomville knows | What you see |
+| --- | --- | --- |
+| A step finishes and the next starts | Stage N goes `done` and stage N+1 goes `working` within 30 s | The card rides the belt to the next station |
+| A step is stuck | That stage is `blocked` | Its pet jumps with `❗`; the belt stops behind it |
+| The last step finishes | Last stage goes `done` | Card drops into DONE |
+
+The status table above still applies to each pet; the shape only changes where desks are and how cards move.
+
+### Settings
+
+```toml
+[team]
+shape = "lead"                          # lead | pipeline
+lead = "claude"                         # lead shape: who sits at the front desk
+
+# pipeline shape: stage order, left to right
+# shape = "pipeline"
+# stages = ["planner", "coder", "tester"]
+```
+
+If `[team]` is missing, Tomville uses the lead shape with the first agent it sees as the lead. Agents not listed in `stages` wait in the lounge.
+
+Other shapes (pair/reviewer, parallel fan-out with worktrees, peer group, across machines) are in [Later](#later-any-phase).
+
 ## Architecture
 
 ```
@@ -301,6 +353,7 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `--pet AGENT=PET` | e.g. `codex1=fox` | Pet for one agent; repeat for more |
 | `--board FILE` | path | A board file other than `TASKS.md` |
 | `--layout L` | `auto` `landscape` `portrait` | Force a layout |
+| `--team SHAPE` | `lead` `pipeline` | Team shape for this run (see [Team shapes](#team-shapes)) |
 | `--poll SEC` | number | How often to ask herdr for status (default 1) |
 | `--demo` | | Fake agents and tasks; works without herdr. Good for trying pets and themes |
 | `--still` | | No animation; pets jump straight to their zone |
@@ -463,17 +516,18 @@ User files live outside the package, so updates never overwrite them: `~/.config
 | --- | --- | --- |
 | Morning | Project skeleton, `pyproject.toml`, office map, Textual layout (office + Team + Board + Events) | `tomville` opens the empty office |
 | Midday | Poller: `herdr agent list` + `TASKS.md` into events | Team list and board show real data |
-| Afternoon | World model: zones, status-to-behaviour table, cell-by-cell movement, fps option (`F`) | Pets walk to their desk when you start Claude or Codex |
+| Afternoon | World model: zones, status-to-behaviour table, cell-by-cell movement, fps option (`F`); lead + workers shape | Pets walk to their desk when you start Claude or Codex |
 | Evening | Emoji and ASCII sprites, built-in cat, dog and sheep | Style switch (`S`) works; tests for the world model pass |
 
 **Day 2: your own pets, setup and install**
 
 | Block | Build | Done when |
 | --- | --- | --- |
-| Morning | Block-pixel sprite format with palettes; custom pets folder; `pets list`, `pets show`, `pets new`, `pets check` | Your own fox walks around in its colours |
-| Midday | Themes (`T`), agent colours, emoji width check and calibration screen | Map stays aligned on the 11-inch screen |
-| Afternoon | CLI: office options, `status` (with `--json`, `--watch`), `doctor`, `setup`, `config`, `theme list`; `tmv` alias | `tmv status --json` and `tmv doctor` work; `--help` lists every option |
-| Evening | Tap to select, `Enter` to open the pane, idle power saving; install test with `uv tool install` from GitHub | Fresh install works end to end |
+| Morning | Pipeline shape: conveyor office map, `[team]` settings, `--team`, handoff detection | A card rides the belt from planner to coder to tester |
+| Midday | Block-pixel sprite format with palettes; custom pets folder; `pets list`, `pets show`, `pets new`, `pets check` | Your own fox walks around in its colours |
+| Afternoon | Themes (`T`), agent colours, emoji width check and calibration screen | Map stays aligned on the 11-inch screen |
+| Evening | CLI: office options, `status` (with `--json`, `--watch`), `doctor`, `setup`, `config`, `theme list`; `tmv` alias | `tmv status --json` and `tmv doctor` work; `--help` lists every option |
+| Late | Tap to select, `Enter` to open the pane, idle power saving; install test with `uv tool install` from GitHub | Fresh install works end to end |
 
 If day 1 runs late, drop block-pixel sprites from day 2 first: emoji and ASCII are enough to use the app.
 
@@ -529,6 +583,7 @@ Rules for phase 1 that keep phase 3 easy:
 - GitHub Projects board instead of `TASKS.md`.
 - Full setup wizard with live previews; more themes.
 - Shell tab-completion (`tomville completion bash|zsh|fish`).
+- More team shapes: pair/reviewer (two facing desks), parallel fan-out with git worktrees, peer group, and agents on other machines (`herdr --machine`).
 
 ## Risks
 
@@ -536,6 +591,7 @@ Rules for phase 1 that keep phase 3 easy:
 | --- | --- | --- |
 | `herdr agent list` output changes in a herdr update | Pets freeze or vanish | The poller is one small file; test after `herdr update` |
 | Emoji width differs on the tablet font | Map tiles shift | Calibration screen; ASCII style |
+| Pipeline handoffs are guessed from status timing | A card moves at the wrong time | 30 s window is a setting; agents can also move cards in `TASKS.md` |
 | Battery drain under PRoot | Tablet gets warm | 10 fps default; auto 2 fps when idle; 5 fps saver |
 | Polling herdr every second costs CPU | Slower agents | Raise `poll_seconds` to 2–3 (`--poll 3`) |
 | Repo stays private | Others cannot install it | Phase 2, step 7: make it public |
@@ -544,6 +600,7 @@ Rules for phase 1 that keep phase 3 easy:
 ## Decided
 
 - Name: Tomville. Command `tomville`, short alias `tmv`; settings in `~/.config/tomville/`.
+- v1 team shapes: lead + workers, and pipeline. Other shapes come later.
 - Tomville builds on top of herdr, not as a replacement. herdr still runs the panes, sessions and agent status; Tomville reads that status and draws it, running in its own herdr tab.
 - v1 is watch-only; the prompt box comes later.
 - Built-in pets: cat, dog, sheep. Built-in themes: night, game-boy, green-screen.
