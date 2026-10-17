@@ -11,8 +11,9 @@ from tomville.core.board.github import GitHubBoard
 from tomville.core.board.tasks_md import TasksMarkdownBoard
 from tomville.core.models import (
     Agent, AgentAppeared, AgentLeft, AgentStatusChanged, BoardOffline,
-    BoardOnline, CardChanged, CardRemoved, Status,
+    BoardOnline, CardChanged, CardRemoved, MessageSent, Status,
 )
+from tomville.core.messages import LogFollower, log_path
 from tomville.core.settings import ReaderSettings
 
 
@@ -45,6 +46,7 @@ class EventReader:
         self.agents = {}
         self.cards = {}
         self.offline_since = None
+        self.messages = LogFollower(log_path(project))
         self.board_wake = asyncio.Event()
         # Optional: called as snapshot(agents, cards) once each source has read its
         # first state. That first state is not emitted as events (no "appeared" or
@@ -162,8 +164,19 @@ class EventReader:
             except asyncio.TimeoutError:
                 pass
 
+    async def _messages(self, emit):
+        # Only messages sent while the office is open; old ones are history.
+        self.messages.skip_existing()
+        while True:
+            try:
+                for message in self.messages.read_new():
+                    emit(MessageSent(message))
+            except OSError:
+                pass
+            await asyncio.sleep(self.settings.poll_seconds)
+
     async def run(self, emit):
-        tasks = [asyncio.create_task(self._agents(emit)), asyncio.create_task(self._board(emit))]
+        tasks = [asyncio.create_task(self._agents(emit)), asyncio.create_task(self._board(emit)), asyncio.create_task(self._messages(emit))]
         try:
             await asyncio.gather(*tasks)
         finally:

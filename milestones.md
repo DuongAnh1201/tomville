@@ -107,8 +107,8 @@ Checked with fake events (`tests/test_world.py`, `tests/test_app.py`) and live i
 
 ## M5 · Messages and pipeline
 
-- [ ] `tmv send AGENT TEXT`: sender from `HERDR_PANE_ID`, calls `herdr agent prompt`, appends to `.tomville/messages.jsonl`
-- [ ] Claude Code `PreToolUse` hook that logs direct `herdr agent prompt` calls
+- [x] `tmv send AGENT TEXT`: sender from `HERDR_PANE_ID`, calls `herdr agent prompt`, appends to `.tomville/messages.jsonl`
+- [x] Claude Code `PreToolUse` hook that logs direct `herdr agent prompt` calls
 - [ ] Envelope walk, speech bubble, `claude → codex1: …` in Events (both shapes)
 - [ ] Conveyor-belt office map; `[team] shape = "pipeline"`, `stages = [...]`; `--team`
 - [ ] Pipeline handoff from the log; timing guess as fallback, shown with `?`

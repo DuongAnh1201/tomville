@@ -22,11 +22,12 @@ from tomville.core.models import (
     Card,
     CardChanged,
     CardRemoved,
+    MessageSent,
     Column,
     Event,
     Status,
 )
-from tomville.core.script import Step
+from tomville.core.script import Step, say, wait, walk
 from tomville.core.shapes import PLAYS, LeadShape, OfficeMap, Rect, TeamShape
 from tomville.core.shapes.base import WALL
 
@@ -154,6 +155,8 @@ class World:
             self.play.on_card(self, event.card, prev)
         elif isinstance(event, CardRemoved):
             self.cards.pop(event.id, None)
+        elif isinstance(event, MessageSent):
+            self._message(event.message.sender, event.message.to, event.message.text)
 
     def _appeared(self, agent: Agent) -> None:
         if agent.name in self.pets:
@@ -187,6 +190,32 @@ class World:
             del self.pets[name]
         else:
             self._relayout(snap=False)
+
+    def _message(self, sender: str | None, to: str, text: str) -> None:
+        """The envelope walk: the sender carries ✉ to the receiver's desk and walks back.
+
+        With an unknown sender (a guessed handoff) the receiver just shows "? ✉ …".
+        """
+        note = f"✉ {text}"
+        if sender is None or sender not in self.pets or sender == to or self.office is None:
+            if to in self.pets:
+                self.say(to, f"? {note}")
+            return
+        spot = self._front_of_desk(to)
+        if spot is None:
+            self.say(sender, note)
+            return
+        self.run(sender, [walk(spot), say(note), wait(), walk(self.office.seats.get(sender, spot))])
+
+    def _front_of_desk(self, name: str) -> Cell | None:
+        """Where a visitor stands to talk to `name`: across the desk from its seat."""
+        office = self.office
+        desk = office.desks.get(name) if office else None
+        seat = office.seats.get(name) if office else None
+        if desk is None or seat is None:
+            return None
+        # The seat is on one side of the desk; the visitor stands on the other.
+        return (desk.cx, desk.y - 1) if seat[1] >= desk.y + desk.h else (desk.cx, desk.y + desk.h)
 
     def _new_pet(self, agent: Agent) -> Pet:
         return Pet(agent.name, agent.kind, agent.status, 0.0, 0.0)

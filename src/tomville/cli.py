@@ -59,6 +59,14 @@ def build_parser():
             sub.add_argument('key')
         if name == 'set':
             sub.add_argument('value')
+    send = commands.add_parser('send', help='prompt another agent and log who sent it')
+    common_options(send)
+    send.add_argument('agent', help='herdr name of the agent to prompt')
+    send.add_argument('text', nargs='+', help='the prompt')
+    send.add_argument('--wait', action='store_true', help='wait until the agent settles (passed to herdr)')
+    send.add_argument('--timeout', type=int, metavar='MS', help='give up after MS milliseconds (passed to herdr)')
+    hook = commands.add_parser('hook', help=argparse.SUPPRESS)
+    hook.add_argument('name', choices=('claude-pre-tool-use',))
     task = commands.add_parser('task', help='manage GitHub task cards')
     common_options(task)
     tasks = task.add_subparsers(dest='task_command', required=True)
@@ -167,6 +175,9 @@ def main(argv=None):
     for name, default in {'project': Path.cwd(), 'config': None, 'json': False, 'no_color': False, 'quiet': False, 'verbose': False}.items():
         if not hasattr(args, name):
             setattr(args, name, default)
+    if args.command == 'hook':
+        from tomville.core.messages import claude_hook
+        return claude_hook()
     project = args.project.expanduser().resolve()
     try:
         if args.command == 'config':
@@ -192,6 +203,11 @@ def main(argv=None):
             return int(result['problems'] > 0)
         if args.command == 'task':
             return task_command(args, project, settings)
+        if args.command == 'send':
+            from tomville.core.messages import repo_root, send
+            result = send(repo_root(project), args.agent, ' '.join(args.text), args.wait, args.timeout)
+            output({'sent': args.agent, 'herdr': result}, args, f'sent to {args.agent}')
+            return 0
         from tomville.tui.app import TomvilleApp
         previous_no_color = os.environ.get('NO_COLOR')
         if args.no_color:

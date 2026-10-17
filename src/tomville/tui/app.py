@@ -8,7 +8,7 @@ from datetime import datetime
 from rich.text import Text
 
 from tomville.core.events import EventReader
-from tomville.core.models import AgentAppeared, AgentLeft, AgentStatusChanged, CardChanged, CardRemoved, BoardOffline, BoardOnline, Column, Event
+from tomville.core.models import AgentAppeared, AgentLeft, AgentStatusChanged, CardChanged, CardRemoved, BoardOffline, BoardOnline, MessageSent, Column, Event
 from tomville.core.settings import load_settings
 
 from textual.app import App, ComposeResult
@@ -197,6 +197,9 @@ class TomvilleApp(App):
             message = f"Board offline since {event.since:%H:%M:%S}"
         elif isinstance(event, BoardOnline):
             message = "Board online"
+        elif isinstance(event, MessageSent):
+            m = event.message
+            message = f"{m.sender or '?'} → {m.to}: {m.text}"
         else:
             return
         self.query_one(EventsPanel).write(Text(f"{datetime.now():%H:%M:%S} {message}"))
