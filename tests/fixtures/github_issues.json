@@ -1,0 +1,183 @@
+[
+ {
+  "number": 10,
+  "title": "AGENTS.md: Your queue",
+  "state": "closed",
+  "html_url": "https://github.com/DuongAnh1201/tomville/pull/10",
+  "labels": [],
+  "updated_at": "2026-10-17T06:58:04Z",
+  "closed_at": "2026-10-17T06:58:02Z",
+  "pull_request": {
+   "url": "https://api.github.com/repos/DuongAnh1201/tomville/pulls/10",
+   "html_url": "https://github.com/DuongAnh1201/tomville/pull/10",
+   "diff_url": "https://github.com/DuongAnh1201/tomville/pull/10.diff",
+   "patch_url": "https://github.com/DuongAnh1201/tomville/pull/10.patch",
+   "merged_at": "2026-10-17T06:58:02Z"
+  }
+ },
+ {
+  "number": 9,
+  "title": "AGENTS.md: 'Your queue' section (how workers find and take their next issue)",
+  "state": "closed",
+  "html_url": "https://github.com/DuongAnh1201/tomville/issues/9",
+  "labels": [
+   {
+    "name": "status:review"
+   },
+   {
+    "name": "agent:claude"
+   }
+  ],
+  "updated_at": "2026-10-17T06:58:03Z",
+  "closed_at": "2026-10-17T06:58:03Z"
+ },
+ {
+  "number": 8,
+  "title": "Team workflow: no work on main, PR for every change",
+  "state": "closed",
+  "html_url": "https://github.com/DuongAnh1201/tomville/pull/8",
+  "labels": [],
+  "updated_at": "2026-10-17T06:48:22Z",
+  "closed_at": "2026-10-17T06:48:21Z",
+  "pull_request": {
+   "url": "https://api.github.com/repos/DuongAnh1201/tomville/pulls/8",
+   "html_url": "https://github.com/DuongAnh1201/tomville/pull/8",
+   "diff_url": "https://github.com/DuongAnh1201/tomville/pull/8.diff",
+   "patch_url": "https://github.com/DuongAnh1201/tomville/pull/8.patch",
+   "merged_at": "2026-10-17T06:48:20Z"
+  }
+ },
+ {
+  "number": 7,
+  "title": "Team workflow: no work on main, PR for every change, issue comment after each fix",
+  "state": "closed",
+  "html_url": "https://github.com/DuongAnh1201/tomville/issues/7",
+  "labels": [
+   {
+    "name": "status:review"
+   },
+   {
+    "name": "agent:claude"
+   }
+  ],
+  "updated_at": "2026-10-17T06:48:22Z",
+  "closed_at": "2026-10-17T06:48:22Z"
+ },
+ {
+  "number": 6,
+  "title": "M6 \u00b7 CLI essentials",
+  "state": "open",
+  "html_url": "https://github.com/DuongAnh1201/tomville/issues/6",
+  "labels": [
+   {
+    "name": "status:todo"
+   },
+   {
+    "name": "agent:claude2"
+   },
+   {
+    "name": "agent:codex1"
+   },
+   {
+    "name": "milestone"
+   }
+  ],
+  "updated_at": "2026-10-17T06:41:32Z",
+  "closed_at": null
+ },
+ {
+  "number": 5,
+  "title": "M5 \u00b7 Messages and pipeline",
+  "state": "open",
+  "html_url": "https://github.com/DuongAnh1201/tomville/issues/5",
+  "labels": [
+   {
+    "name": "status:todo"
+   },
+   {
+    "name": "agent:claude"
+   },
+   {
+    "name": "milestone"
+   }
+  ],
+  "updated_at": "2026-10-17T06:41:30Z",
+  "closed_at": null
+ },
+ {
+  "number": 4,
+  "title": "M4 \u00b7 Sprites",
+  "state": "open",
+  "html_url": "https://github.com/DuongAnh1201/tomville/issues/4",
+  "labels": [
+   {
+    "name": "status:todo"
+   },
+   {
+    "name": "agent:claude2"
+   },
+   {
+    "name": "milestone"
+   }
+  ],
+  "updated_at": "2026-10-17T06:41:28Z",
+  "closed_at": null
+ },
+ {
+  "number": 3,
+  "title": "M3 \u00b7 World model and lead + workers",
+  "state": "open",
+  "html_url": "https://github.com/DuongAnh1201/tomville/issues/3",
+  "labels": [
+   {
+    "name": "status:todo"
+   },
+   {
+    "name": "agent:claude2"
+   },
+   {
+    "name": "milestone"
+   }
+  ],
+  "updated_at": "2026-10-17T06:41:26Z",
+  "closed_at": null
+ },
+ {
+  "number": 2,
+  "title": "M2 \u00b7 Event reader (real data)",
+  "state": "open",
+  "html_url": "https://github.com/DuongAnh1201/tomville/issues/2",
+  "labels": [
+   {
+    "name": "status:todo"
+   },
+   {
+    "name": "agent:codex1"
+   },
+   {
+    "name": "milestone"
+   }
+  ],
+  "updated_at": "2026-10-17T06:41:24Z",
+  "closed_at": null
+ },
+ {
+  "number": 1,
+  "title": "M1 \u00b7 Skeleton and empty office",
+  "state": "open",
+  "html_url": "https://github.com/DuongAnh1201/tomville/issues/1",
+  "labels": [
+   {
+    "name": "status:doing"
+   },
+   {
+    "name": "agent:claude"
+   },
+   {
+    "name": "milestone"
+   }
+  ],
+  "updated_at": "2026-10-17T06:59:39Z",
+  "closed_at": null
+ }
+]
