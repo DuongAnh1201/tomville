@@ -1,0 +1,145 @@
+# Tomville: the idea
+
+2026-10-17 · Tom Nguyen
+
+This file collects what we decided while planning, and why. [README.md](README.md) is the full design (screens, options, file layout); [milestones.md](milestones.md) is the build checklist. When the three disagree, update them together.
+
+## What Tomville is
+
+A retro game view of an agent team, in the terminal. Each agent (Claude, Codex, …) is a pixel pet walking around an office, and its movement shows what the agent is doing. You can see the whole team at a glance: who is working, who is stuck waiting for you, who is done.
+
+**Tomville builds on top of herdr; it is not a new herdr.** herdr is the terminal manager: it runs the tabs and panes, starts the agents, keeps sessions alive and works out each agent's status. Tomville is one more app in its own herdr tab. It reads herdr's status and draws it, and a few keys send you back into herdr (for example `Enter` on a pet opens that agent's pane).
+
+Why not build a new herdr: real terminals inside panes, persistent sessions, agent detection and the Claude/Codex integrations are months of work, harder still under Termux PRoot. Building on top, all of that is free and the two days go to the part that is ours: the office, pets, board and animations.
+
+## Name and command
+
+| | Value |
+| --- | --- |
+| Name | **Tomville** (Tom + ville) |
+| Command | `tomville`, short alias `tmv` |
+| Package (PyPI) | `tomville`: free on PyPI and GitHub (checked 2026-10-16) |
+| Repo | https://github.com/DuongAnh1201/tomville (private; old `pixel-office` links redirect) |
+| Local folder | `~/tomville` |
+| Settings | `~/.config/tomville/settings.toml`, env vars `TOMVILLE_*` |
+
+Names we dropped: *Pixel Office* (didn't like it), *paddock* (`paddock` and `pdk` taken on PyPI), `tv` as the alias (clashes with the "television" fuzzy finder).
+
+### How it becomes a command
+
+1. `pyproject.toml` lists the commands and the function each runs:
+   ```toml
+   [project]
+   name = "tomville"
+
+   [project.scripts]
+   tomville = "tomville.cli:main"
+   tmv      = "tomville.cli:main"
+   ```
+2. `uv tool install --editable .` gives the app its own Python environment and writes `tomville` and `tmv` launchers into `~/.local/bin`, which is already on `PATH`.
+3. `--editable` points the launchers at the code folder, so edits work on the next run without reinstalling.
+4. Later, publishing to PyPI makes it `uv tool install tomville` for anyone, plus a one-line `install.sh`.
+
+## What herdr gives us
+
+Checked on this tablet with herdr 0.9.5.
+
+### Agent status: 5 values
+
+| Status | Meaning | Pet |
+| --- | --- | --- |
+| `working` | Busy on a turn | At its desk, typing |
+| `blocked` | herdr saw an approval or question on screen: it needs **you** | Jumps with `❗`; the most important one to see |
+| `done` | Finished, and the result has not been looked at | Walks to the review zone |
+| `idle` | Ready, and the result has been seen | Lounge, then sleeps |
+| `unknown` | An agent is there, but herdr can't classify it | Stands still with `?` |
+
+- `done` → `idle` happens when someone focuses the agent. `Enter` on a pet should do the same.
+- No agent in a pane is not a status: the agent just leaves `herdr agent list` (pet walks out the door).
+- herdr can be wrong: it may miss an unfamiliar approval screen, and some agents (Antigravity, Grok) show `idle` while background jobs run. Show `unknown` honestly; never guess.
+- herdr knows 24 agent kinds (claude, codex, gemini, cursor, copilot, opencode, amp, qwen, kimi, …), so every kind needs a default pet.
+
+### Real `herdr agent list` output
+
+From inside herdr, with only this Claude session running:
+
+```json
+{"id":"cli:agent:list","result":{"type":"agent_list","agents":[{
+  "agent":"claude","agent_status":"working",
+  "agent_session":{"agent":"claude","kind":"id","source":"herdr:claude","value":"2810c32f-…"},
+  "pane_id":"w1:p1","tab_id":"w1:t1","workspace_id":"w1","terminal_id":"term_65e02e…",
+  "cwd":"/root","foreground_cwd":"/root","focused":true,
+  "revision":1,"state_change_seq":6,
+  "terminal_title":"◑ Permission and GitHub config","terminal_title_stripped":"Permission and GitHub config"}]}}
+```
+
+Still to check: whether `agent` is the kind or the given name once an agent is started with `herdr agent start <name>`.
+
+### Live event stream
+
+`events.subscribe` in the herdr API pushes events such as `pane.agent_status_changed` (pane, agent, new status), `pane.agent_detected`, `pane.created`, `pane.closed` and `pane.focused`. Tomville listens to it instead of polling, which is faster and easier on the battery. Polling `herdr agent list` every `poll_seconds` is the fallback.
+
+### How agents work together in herdr
+
+herdr has no chat channel, shared memory or task list. Agents use each other's terminals through the same commands:
+
+| Command | Use |
+| --- | --- |
+| `herdr agent prompt NAME "…" --wait` | Type a prompt into another agent and wait until it settles |
+| `herdr agent read NAME` | Read its screen; long answers go through a file |
+| `herdr agent wait NAME --until blocked` | Wait for a status |
+| `herdr agent send-keys NAME esc` | Press keys in its UI |
+| `herdr worktree …` | Give each worker its own git worktree |
+| `herdr --machine LABEL …` | The same, on another machine over SSH |
+
+herdr sets `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID` and `HERDR_PANE_ID` in every pane, so a command knows which pane it runs in.
+
+## Team shapes
+
+Any agent can prompt any other, so the team shape is up to us. v1 draws two:
+
+1. **Lead + workers** (default): the lead at the front desk hands tasks to workers at the desks around it.
+2. **Pipeline**: stations in a row joined by a conveyor belt (planner → coder → tester). A card rides the belt on each handoff; a `blocked` stage stops the belt.
+
+Picked with `[team]` in `settings.toml` (`shape`, `lead`, `stages`) or `--team lead|pipeline`. Later: pair/reviewer, parallel fan-out with worktrees, peer group, across machines.
+
+## Who talks to whom
+
+herdr shows *what* each agent is doing, but not *who sent a prompt to whom*: the reply goes only to the sender, and the event stream has no "prompt sent" event or sender field (checked in the API schema). So Tomville keeps its own message log, `.tomville/messages.jsonl`:
+
+| Way | How | Reliable? |
+| --- | --- | --- |
+| `tmv send NAME "…"` | Agents send work through Tomville; the sender comes from `HERDR_PANE_ID`; Tomville calls `herdr agent prompt` and logs it | Exact, when agents use it. `tmv setup` adds the rule to `CLAUDE.md` / `AGENTS.md` |
+| Claude Code hook | A `PreToolUse` hook logs any `herdr agent prompt` Claude runs directly | Exact for Claude as sender. Codex equivalent not checked yet |
+| Timing guess | Sender `working`, then target `working` within seconds | Fallback only, shown as `? → codex1` |
+
+In the office: the sender's pet carries `✉` to the target's desk with a speech bubble, the Events panel shows `10:42 claude → codex1: Fix the login test`, and an unknown sender shows `?`.
+
+## Look and feel
+
+- Retro game in a character grid, movement one cell at a time.
+- Built for an 11-inch tablet in Termux, landscape first (~140 × 40 cells); portrait stacks the sidebar under the office.
+- Options: frame rate (5/10/15/30, default 10), sprite style (emoji, ASCII, block pixels), a pet and colour per agent, themes (night, game-boy, green-screen).
+- Built-in pets: cat, dog, sheep; your own in `~/.config/tomville/sprites/`.
+- v1 only watches; a prompt box comes later.
+
+## Scope for the two-day build
+
+- Day 1: a live, moving office with the lead + workers shape.
+- Day 2: pipeline shape with `tmv send` and the message log, then custom pets, themes, CLI commands, install.
+- If time runs short, drop block-pixel sprites first, then themes. Team shapes and messages matter more than looks.
+- After the weekend: publish (PyPI + `install.sh`), then a web UI (`tmv web`).
+
+## Development setup
+
+- Ubuntu 26.04 in Termux PRoot, aarch64; Python 3.14.4; herdr 0.9.5; Claude Code and Codex logged in; `gh` logged in as DuongAnh1201 over HTTPS.
+- Work inside herdr, so agents show up in `herdr agent list` and can control each other. Outside herdr, `HERDR_ENV` is unset and the herdr integration can't report status.
+- `uv` is not installed yet: `curl -LsSf https://astral.sh/uv/install.sh | sh`.
+- Before CI work: the `gh` token lacks the `workflow` scope (`gh auth refresh -s workflow`), needed to push `.github/workflows/*`.
+
+## Open questions
+
+- Which pet and colour for each agent?
+- Licence: MIT, or another?
+- Does Codex have a hook like Claude's `PreToolUse` for logging messages?
+- What does `herdr agent list` show for a named agent (`herdr agent start codex1 …`)?
