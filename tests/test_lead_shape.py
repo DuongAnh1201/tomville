@@ -44,5 +44,5 @@ def test_desks_do_not_overlap_bottom_zones():
 
 
 def test_too_small_window():
-    m = layout(w=30, h=10)
-    assert "too small" in m.text()
+    m = layout(w=29, h=9)
+    assert "too small" in m.text() and "need 30 × 10" in m.text()

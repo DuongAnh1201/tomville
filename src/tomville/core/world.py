@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import random
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol
+
+from rich.cells import cell_len
 
 from tomville.core.models import (
     Agent,
@@ -40,6 +42,7 @@ SLEEP_AFTER = 60.0  # seconds idle before a pet sleeps
 BLINK_HZ = 2.0
 BELT_SPEED = 6.0  # cells per second for cards riding the pipeline belt
 MAX_BUBBLE = 28  # characters
+LABEL_MARK = 5  # cells kept free after a name for its mark (" #123", " ❗", " z z")
 
 
 @dataclass
@@ -79,6 +82,8 @@ class Appearance:
     mark: str  # shown after the name: "❗", "?", "z z", a task id, or ""
     bubble: str | None
     moving: bool = False
+    label_x: int = 0  # where the name starts: right of the sprite, or left of it near the wall
+    label_y: int | None = None  # its row, when not the sprite's own (name under or over it)
 
     @property
     def label(self) -> str:
@@ -258,7 +263,38 @@ class World:
         return None
 
     def appearances(self) -> list[Appearance]:
-        return [self.appearance(p) for p in self.pets.values()]
+        return self._place_labels([self.appearance(p) for p in self.pets.values()])
+
+    def _place_labels(self, apps: list[Appearance]) -> list[Appearance]:
+        """Choose, for each name, the spot next to its sprite where it fits.
+
+        Right of the sprite is the default. A name moves to the left near the right
+        wall or when its neighbour is in the way, so names stay inside the walls and
+        never cover a sprite or another name. Room is kept for the mark after the
+        name (a task id, ❗, z z) when there is any; a very tight row gives that up.
+        """
+        o = self.office
+        if o is None:
+            return apps
+        taken = [Rect(a.x, a.y, 2, 1) for a in apps]
+        out = []
+        for a in apps:
+            w = cell_len(a.label)
+            options = []
+            for dy in (0, 1, -1):  # beside the sprite, else under or over it
+                for room in (cell_len(a.name) + LABEL_MARK, cell_len(a.name)):
+                    options.append((Rect(a.x + 2, a.y + dy, room, 1), a.x + 2, a.y + dy))
+                    options.append((Rect(a.x - 1 - room, a.y + dy, room, 1), a.x - 1 - w, a.y + dy))
+                    if dy:
+                        options.append((Rect(a.x, a.y + dy, room, 1), a.x, a.y + dy))
+            for rect, x, y in options:
+                if 1 <= rect.y <= o.height - 2 and rect.x >= 1 and rect.x + rect.w <= o.width - 1 and not any(_overlap(rect, t) for t in taken):
+                    taken.append(rect)
+                    out.append(replace(a, label_x=max(1, x), label_y=y))
+                    break
+            else:
+                out.append(a)
+        return out
 
     def appearance(self, pet: Pet) -> Appearance:
         x, y = pet.cell
@@ -276,7 +312,7 @@ class World:
         elif pet.status is Status.WORKING:
             mark = self.task_of(pet.name) or ""
         bubble = pet.bubbles[0][0] if pet.bubbles else None
-        return Appearance(pet.name, pet.kind, pet.status, x, y, mark, bubble, bool(pet.path))
+        return Appearance(pet.name, pet.kind, pet.status, x, y, mark, bubble, bool(pet.path), x + 2)
 
     def _jump_to(self, x: int, y: int) -> int:
         """Where a blocked pet at (x, y) is drawn while it jumps: up, else down, else here.
@@ -562,9 +598,7 @@ def _blocked_cells(office: OfficeMap) -> set[Cell]:
 
 
 def _label_rect(a: Appearance) -> Rect:
-    from rich.cells import cell_len
-
-    return Rect(a.x + 2, a.y, cell_len(a.label), 1)
+    return Rect(a.label_x, a.y if a.label_y is None else a.label_y, cell_len(a.label), 1)
 
 
 def _overlap(a: Rect, b: Rect) -> bool:
