@@ -159,6 +159,20 @@ repo = ""                # owner/name; empty = the project's git remote
 - Agents use `tmv task` instead of long `gh` commands: `tmv task new "Fix login test"`, `tmv task take 12` (adds `status:doing` and the agent's own `agent:` label), `tmv task move 12 review`, `tmv task list`. They call `gh` underneath, and the change shows on the next check.
 - `tmv setup` creates the labels in the repo and adds the board rules to `CLAUDE.md` / `AGENTS.md`.
 
+For the offline source, set `[board] source = "tasks-md"` or run `tmv --board tasks-md`.
+The project file uses this table (extra columns are allowed):
+
+```markdown
+| id | title | status | agent |
+| --- | --- | --- | --- |
+| T1 | Fix login test | doing | codex1 |
+| T2 | Review changes | review | claude |
+```
+
+Status is `todo`, `doing`, `review`, or `done`; use `-` for no agent. The reader
+checks the file's modified time every `poll_seconds` and keeps the last cards if
+it becomes unreadable. `--board PATH` selects another Markdown file.
+
 ## Who talks to whom
 
 herdr shows what each agent is doing, but not who sent a prompt to whom: when the lead runs `herdr agent prompt codex1 "..."`, only the lead gets a reply, and herdr's event stream has no "prompt sent" event or sender field (checked against the herdr 0.9.5 API schema). Tomville records messages itself, in a log both shapes use:
