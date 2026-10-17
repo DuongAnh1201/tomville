@@ -535,6 +535,8 @@ User files live outside the package, so updates never overwrite them: `~/.config
 
 ## Two-day plan
 
+> The build is now tracked in two parts in [milestones.md](milestones.md): Part 1 (fundamentals, lead + workers and pipeline) and Part 2 (other team shapes, custom pets, themes, publishing). The table below is the original plan; where they differ, `milestones.md` wins.
+
 **Day 1: a live, moving office**
 
 | Block | Build | Done when |

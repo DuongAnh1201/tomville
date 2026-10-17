@@ -123,12 +123,14 @@ In the office: the sender's pet carries `✉` to the target's desk with a speech
 - Built-in pets: cat, dog, sheep; your own in `~/.config/tomville/sprites/`.
 - v1 only watches; a prompt box comes later.
 
-## Scope for the two-day build
+## Scope: two parts
 
-- Day 1: a live, moving office with the lead + workers shape.
-- Day 2: pipeline shape with `tmv send` and the message log, then custom pets, themes, CLI commands, install.
-- If time runs short, drop block-pixel sprites first, then themes. Team shapes and messages matter more than looks.
-- After the weekend: publish (PyPI + `install.sh`), then a web UI (`tmv web`).
+The build is split in two (details in [milestones.md](milestones.md)):
+
+1. **Part 1 · Fundamentals** (target: the two-day weekend): live herdr data, movement, emoji and ASCII sprites, `tmv send` and the message log, CLI essentials, install from GitHub, with the **lead + workers** and **pipeline** shapes only.
+2. **Part 2 · More shapes and polish**: pair/reviewer, parallel fan-out with worktrees, peer group, across machines; then custom pets and block pixels, themes, power saving, publishing (PyPI + `install.sh`) and the web UI (`tmv web`).
+
+Part 1 builds the team shape as a plug-in, so Part 2 shapes don't change the core.
 
 ## Development setup
 
