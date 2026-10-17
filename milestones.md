@@ -43,13 +43,13 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 
 ## M1 · Skeleton and empty office
 
-- [ ] `pyproject.toml` with `tomville` and `tmv` entry points; package in `src/tomville/`
-- [ ] `uv tool install --editable .` puts both commands on `PATH`
-- [ ] `tomville --version` and `tmv --help` work
-- [ ] Textual layout: office floor, Team, Board, Events panels, key bar
-- [ ] Lead + workers office map: boss desk at the top with the board on the wall beside it, named worker desks facing the boss, lounge, review zone, door
-- [ ] Landscape and portrait layouts
-- [ ] `pytest` set up with one passing test
+- [x] `pyproject.toml` with `tomville` and `tmv` entry points; package in `src/tomville/`
+- [x] `uv tool install --editable .` puts both commands on `PATH`
+- [x] `tomville --version` and `tmv --help` work
+- [x] Textual layout: office floor, Team, Board, Events panels, key bar
+- [x] Lead + workers office map: boss desk at the top with the board on the wall beside it, named worker desks facing the boss, lounge, review zone, door
+- [x] Landscape and portrait layouts
+- [x] `pytest` set up with one passing test
 
 **Check:** `tmv` opens the empty office in a herdr tab at ~140 × 40, and `q` quits cleanly.
 
