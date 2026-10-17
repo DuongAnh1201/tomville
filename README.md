@@ -4,7 +4,7 @@
 
 ## Summary
 
-Build a terminal app where each agent (Claude, Codex) is a pixel pet walking around a retro office. Its movement shows what the agent is doing. The app reads live status from herdr, which is already installed, and the task board from `TASKS.md`, so v1 needs no change to the agent setup.
+Build a terminal app where each agent (Claude, Codex) is a pixel pet walking around a retro office. Its movement shows what the agent is doing. The app reads live status from herdr, which is already installed, and the task board from GitHub Issues (or `TASKS.md`), so v1 needs no change to the agent setup.
 
 - **Look:** a retro game in a character grid, with movement one cell at a time.
 - **Screen:** designed for an 11-inch tablet in Termux, landscape first.
@@ -66,7 +66,7 @@ In portrait, the sidebar moves under the office floor.
 | `unknown` | Stays where it is | Stands still, `?` bubble | |
 | Agent gone | Leaves through the door | Walks off-screen | Removed from the Team list |
 
-When the lead assigns a task (a new `doing` row in `TASKS.md`), the lead pet walks to the worker's desk and hands over a card.
+When the lead assigns a task (an issue gets `status:doing` and a worker's `agent:` label), the lead pet walks to the worker's desk and hands over a card.
 
 ## Team shapes
 
@@ -78,9 +78,9 @@ One lead hands tasks to workers. The office in [What it looks like](#what-it-loo
 
 | What happens | How Tomville knows | What you see |
 | --- | --- | --- |
-| Lead gives a worker a task | A new `doing` row in `TASKS.md` with that worker's name | Lead pet walks to the worker's desk and hands over a card |
+| Lead gives a worker a task | An issue gets `status:doing` and that worker's `agent:` label (or a `doing` row in `TASKS.md`) | Lead pet walks to the worker's desk and hands over a card |
 | Worker finishes | Worker goes `working` → `done` | Worker carries the card to the review zone |
-| Lead reviews | Card moves to `review`/`done` in `TASKS.md` | Card moves on the board; lead pet visits the review zone |
+| Lead reviews | Issue moves to `status:review`, then is closed | Card moves on the board; lead pet visits the review zone |
 
 ### 2. Pipeline
 
@@ -120,6 +120,32 @@ If `[team]` is missing, Tomville uses the lead shape with the first agent it see
 
 Other shapes (pair/reviewer, parallel fan-out with worktrees, peer group, across machines) are in [Later](#later-any-phase).
 
+## Task board
+
+The board's main source is **GitHub Issues**: each issue is a card. The board is a plug-in, like team shapes, so a project can use `TASKS.md` instead (offline, instant) by changing one setting.
+
+| Board idea | GitHub Issues (default) | `TASKS.md` |
+| --- | --- | --- |
+| Card | An open issue, `#12 Fix login test` | A row |
+| Column | Label `status:todo`, `status:doing`, `status:review`; closed = done | The row's status |
+| Who has it | Label `agent:codex1` (agents aren't GitHub users, so no assignees) | The row's agent |
+| Finished | A commit or PR with `Fixes #12` closes it | Row set to `done` |
+| Notes | Issue comments (`gh issue comment`) | None |
+| Updates | Checked every `check_seconds` (you choose) | Instant, on file change |
+
+```toml
+[board]
+source = "github"        # github | tasks-md
+check_seconds = 60       # how often Tomville checks GitHub; you choose (minimum 10)
+repo = ""                # owner/name; empty = the project's git remote
+```
+
+- `check_seconds` is the user's trade-off: lower moves cards sooner, higher saves battery and network. Change it in the app (`G` key cycles 15/30/60/120 s), with `--board-check SEC`, or `tmv config set board.check_seconds 30`.
+- Each check is one GitHub API call for issues updated since the last check, sent with the last `ETag`; an unchanged board returns `304` and does not count against GitHub's rate limit.
+- When GitHub can't be reached, the board keeps the last cards and shows `offline since 10:42`; pets keep moving from herdr data.
+- Agents use `tmv task` instead of long `gh` commands: `tmv task new "Fix login test"`, `tmv task take 12` (adds `status:doing` and the agent's own `agent:` label), `tmv task move 12 review`, `tmv task list`. They call `gh` underneath, and the change shows on the next check.
+- `tmv setup` creates the labels in the repo and adds the board rules to `CLAUDE.md` / `AGENTS.md`.
+
 ## Who talks to whom
 
 herdr shows what each agent is doing, but not who sent a prompt to whom: when the lead runs `herdr agent prompt codex1 "..."`, only the lead gets a reply, and herdr's event stream has no "prompt sent" event or sender field (checked against the herdr 0.9.5 API schema). Tomville records messages itself, in a log both shapes use:
@@ -148,7 +174,7 @@ What you see:
 ```
  herdr events (status changes) ─┐
  messages.jsonl (tmv send, hook)├─▶  Event reader  ─▶  World model  ─▶  Renderer (Textual)  ─▶  screen
- TASKS.md (mtime check)         ─┘                      pets, zones,       sprite frames,
+ GitHub Issues / TASKS.md      ─┘                      pets, zones,       sprite frames,
                                                         targets, paths     frame timer
                                                               ▲
                                           settings.toml ──────┘  (fps, sprite style, pets)
@@ -156,7 +182,7 @@ What you see:
 
 | Part | Job |
 | --- | --- |
-| Event reader | Runs `herdr agent list` once at start, then listens to herdr's live event stream (`pane.agent_status_changed`, `pane.agent_detected`, `pane.closed`) instead of polling. Also follows the message log and reads `TASKS.md` when it changes. Turns them into events: "codex1 became blocked", "claude → codex1: Fix the login test", "T1 moved to review". Falls back to polling `herdr agent list` every `poll_seconds` if the stream drops |
+| Event reader | Runs `herdr agent list` once at start, then listens to herdr's live event stream (`pane.agent_status_changed`, `pane.agent_detected`, `pane.closed`) instead of polling. Also follows the message log and reads the board (GitHub Issues every `check_seconds`, or `TASKS.md` when it changes). Turns them into events: "codex1 became blocked", "claude → codex1: Fix the login test", "T1 moved to review". Falls back to polling `herdr agent list` every `poll_seconds` if the stream drops |
 | World model | Holds each pet's position, target zone and current animation. Events change targets; it does not draw anything |
 | Movement | Each tick, a pet steps one cell toward its target: first along x, then along y, around walls |
 | Renderer | A Textual widget that draws the office map, then each pet's current frame at its position. Textual only redraws changed cells |
@@ -249,6 +275,7 @@ Colours and your own pet designs are covered in [Custom pets and colours](#custo
 | `S` | Cycle sprite style |
 | `B` | Show the board full-screen |
 | `T` | Cycle colour themes |
+| `G` | Cycle how often the GitHub board is checked (15/30/60/120 s) |
 | `?` | Help |
 
 v1 only watches. Approvals still happen in the agent's own pane: the blocked pet tells you where to go, and `Enter` takes you there. Sending prompts from the app comes later (see [Later](#later-any-phase)).
@@ -358,7 +385,7 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| `-C, --project DIR` | current folder | Project whose `TASKS.md` is shown |
+| `-C, --project DIR` | current folder | Project whose board is shown |
 | `--config FILE` | `~/.config/tomville/settings.toml` | Use another settings file |
 | `--json` | off | Machine-readable output, for scripts and agents |
 | `--no-color` | off | Plain text; also on when `NO_COLOR` is set |
@@ -374,7 +401,8 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `--style S` | `emoji` `ascii` `blocks` | Sprite style |
 | `--theme T` | `night` `game-boy` `green-screen` | Colour theme |
 | `--pet AGENT=PET` | e.g. `codex1=fox` | Pet for one agent; repeat for more |
-| `--board FILE` | path | A board file other than `TASKS.md` |
+| `--board SOURCE` | `github` `tasks-md` `FILE` | Board source for this run; a path means a `TASKS.md`-style file |
+| `--board-check SEC` | number | How often to check GitHub Issues (default 60) |
 | `--layout L` | `auto` `landscape` `portrait` | Force a layout |
 | `--team SHAPE` | `lead` `pipeline` | Team shape for this run (see [Team shapes](#team-shapes)) |
 | `--poll SEC` | number | Polling interval if herdr's event stream is unavailable (default 1) |
@@ -475,7 +503,7 @@ Tomville doctor · v0.1.0
   ✖ codex1   not running → herdr agent start codex1 --kind codex --pane <pane>
 
  Board
-  ✔ TASKS.md found (3 tasks)
+  ✔ GitHub Issues: DuongAnh1201/tomville (3 open, labels ready)
 
  Settings  ~/.config/tomville/settings.toml
  Sprites   ~/.config/tomville/sprites/ (1 custom pet)
@@ -496,7 +524,7 @@ Kept small so it fits in two days.
 | CLI | `argparse` (standard library) with subcommands; two entry points, `tomville` and `tmv` | Options and commands with built-in `--help`; no extra dependency |
 | Settings | TOML: `tomllib` to read, `tomli-w` to write | Human-editable, same format as Codex and herdr |
 | Agent status | `herdr agent list` (JSON via `subprocess`) | Uses the existing setup; no extra server |
-| Board | `TASKS.md`, re-read when its modified time changes | No file-watching library needed |
+| Board | GitHub Issues via `gh api` (with `ETag`) or `TASKS.md` by modified time | Uses the existing `gh` login; no extra library |
 | Packaging | `pyproject.toml` + hatchling; [uv](https://docs.astral.sh/uv/) | One command to install, update, remove |
 | Tests | pytest for the world model, sprite loader and doctor | The game logic is tested with fake events, no agents needed |
 
@@ -513,7 +541,8 @@ tomville/
   src/tomville/
     cli.py           # argparse: office options + status, doctor, setup, pets, theme, config
     core/            # shared by CLI and web; no UI code here
-      events.py      # herdr event stream + messages.jsonl + TASKS.md -> events
+      events.py      # herdr event stream + messages.jsonl + board -> events
+      board/         # board plug-ins: github.py (default), tasks_md.py
       messages.py    # tmv send, message log, hook entry point
       world.py       # pets, zones, targets, movement
       sprites.py     # load sprite files, palette, width check
@@ -542,7 +571,7 @@ User files live outside the package, so updates never overwrite them: `~/.config
 | Block | Build | Done when |
 | --- | --- | --- |
 | Morning | Project skeleton, `pyproject.toml`, office map, Textual layout (office + Team + Board + Events) | `tomville` opens the empty office |
-| Midday | Event reader: `herdr agent list` + herdr event stream + `TASKS.md` into events | Team list and board show real data |
+| Midday | Event reader: `herdr agent list` + herdr event stream + GitHub Issues board into events | Team list and board show real data |
 | Afternoon | World model: zones, status-to-behaviour table, cell-by-cell movement, fps option (`F`); lead + workers shape | Pets walk to their desk when you start Claude or Codex |
 | Evening | Emoji and ASCII sprites, built-in cat, dog and sheep | Style switch (`S`) works; tests for the world model pass |
 
@@ -607,7 +636,7 @@ Rules for phase 1 that keep phase 3 easy:
 
 - Pet editor: paint pets by tapping cells.
 - Prompt box that sends tasks to the lead (`herdr agent prompt claude "..."`).
-- GitHub Projects board instead of `TASKS.md`.
+- GitHub Projects (kanban) view on top of the Issues board; needs the `project` scope on `gh`.
 - Full setup wizard with live previews; more themes.
 - Shell tab-completion (`tomville completion bash|zsh|fish`).
 - More team shapes: pair/reviewer (two facing desks), parallel fan-out with git worktrees, peer group, and agents on other machines (`herdr --machine`).
@@ -627,6 +656,7 @@ Rules for phase 1 that keep phase 3 easy:
 ## Decided
 
 - Name: Tomville. Command `tomville`, short alias `tmv`; settings in `~/.config/tomville/`.
+- The task board is GitHub Issues by default, checked every `check_seconds` (user's choice); `TASKS.md` is the offline plug-in.
 - Messages are logged by Tomville (`tmv send` + Claude Code hook), because herdr does not record senders.
 - Status comes from herdr's event stream, with polling as a fallback.
 - v1 team shapes: lead + workers, and pipeline. Other shapes come later.

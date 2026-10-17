@@ -103,6 +103,25 @@ Any agent can prompt any other, so the team shape is up to us. v1 draws two:
 
 Picked with `[team]` in `settings.toml` (`shape`, `lead`, `stages`) or `--team lead|pipeline`. Later: pair/reviewer, parallel fan-out with worktrees, peer group, across machines.
 
+## Task board: GitHub Issues
+
+Decided 2026-10-17: **GitHub Issues is the main board from the start.** We compared it with `TASKS.md`: Issues are slower (Tomville has to ask GitHub) and need a network, but give history, comments, `Fixes #12` links to commits and PRs, and a good view on the phone. The slowness is the user's choice to make, so the check interval is a setting.
+
+- **Card** = open issue. **Column** = label `status:todo` / `status:doing` / `status:review`; closed = done. **Who has it** = label `agent:codex1` (agents aren't GitHub users, so no assignees).
+- **Check interval**: `[board] check_seconds` (default 60, minimum 10), `--board-check SEC`, or the `G` key in the app. Lower moves cards sooner; higher saves battery and network.
+- Each check is one API call with `ETag`: an unchanged board returns `304` and doesn't use rate limit. Offline, the board keeps its last cards and shows `offline since …`.
+- Agents use `tmv task new/take/move/list`, which call `gh` underneath, instead of long `gh issue edit … --add-label …` commands. Fewer tokens and fewer mistakes.
+- `tmv setup` creates the labels and adds the board rules to `CLAUDE.md` / `AGENTS.md`.
+- **Plug-in**: the board source is swappable like team shapes. `source = "github"` (default) or `"tasks-md"` for offline or quick projects. The office looks the same either way.
+- Bugs and ideas outside the current milestone also go to Issues (label `bug` or `idea`), so agents stay on task.
+
+```toml
+[board]
+source = "github"        # github | tasks-md
+check_seconds = 60
+repo = ""                # empty = the project's git remote
+```
+
 ## Who talks to whom
 
 herdr shows *what* each agent is doing, but not *who sent a prompt to whom*: the reply goes only to the sender, and the event stream has no "prompt sent" event or sender field (checked in the API schema). So Tomville keeps its own message log, `.tomville/messages.jsonl`:
@@ -143,5 +162,6 @@ Part 1 builds the team shape as a plug-in, so Part 2 shapes don't change the cor
 
 - Which pet and colour for each agent?
 - Licence: MIT, or another?
+- Which default for `check_seconds` feels right on the tablet: 30 or 60?
 - Does Codex have a hook like Claude's `PreToolUse` for logging messages?
 - What does `herdr agent list` show for a named agent (`herdr agent start codex1 …`)?

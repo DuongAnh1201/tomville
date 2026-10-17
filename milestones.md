@@ -20,6 +20,8 @@ Part 2 starts only after Part 1 is done.
 5. **Commit this file with the work it describes**, in the same commit.
 6. **Don't rewrite or reorder milestones.** If the plan needs to change, add a note under **Changes** at the bottom and tell the lead.
 7. Tests (`uv run pytest`) must pass before any tick.
+8. **Work items live in GitHub Issues.** Take a task with `tmv task take N` (or `gh issue edit N --add-label status:doing,agent:<you>` before `tmv task` exists). Close it with `Fixes #N` in the commit.
+9. **Found a bug or idea outside the current milestone?** Open an issue (`gh issue create --label bug` or `--label idea`) instead of fixing it now.
 
 ---
 
@@ -33,6 +35,7 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 - [ ] Python 3.11+ available to `uv` (tablet has 3.14.4)
 - [ ] Add `workflow` scope to `gh` (`gh auth refresh -s workflow`), needed before CI
 - [ ] Add Claude Code permission allow rules for `git`, `gh`, `uv`, `herdr`
+- [ ] Create board labels on the repo: `status:todo`, `status:doing`, `status:review`, `agent:claude`, `agent:codex1`, `bug`, `idea`
 - [ ] Note in [idea.md](idea.md) what `herdr agent list` shows for a named agent (`herdr agent start codex1 --kind codex --pane …`)
 
 **Check:** `uv --version`, `gh auth status` lists `workflow`, and `herdr agent list` shows this agent.
@@ -54,12 +57,16 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 - [ ] Read `herdr agent list` once at start into a typed model
 - [ ] Subscribe to herdr's event stream (`pane.agent_status_changed`, `pane.agent_detected`, `pane.closed`)
 - [ ] Fall back to polling every `poll_seconds` when the stream drops
-- [ ] Read `TASKS.md` when it changes (mtime) into board cards
+- [ ] Board plug-in interface (`board/`), chosen by `[board] source`
+- [ ] GitHub Issues source (default): `gh api` with `ETag`, every `check_seconds`; labels → columns and agents
+- [ ] `check_seconds` setting, `--board-check SEC`, `G` key to cycle 15/30/60/120 s
+- [ ] Offline: keep last cards, show `offline since …`
+- [ ] `TASKS.md` source: re-read on modified time
 - [ ] Turn all of it into app events ("codex1 became blocked", "T1 moved to review")
 - [ ] Team list and Board show live data; Events panel logs changes
-- [ ] Tests use recorded herdr JSON, with no herdr running
+- [ ] Tests use recorded herdr and GitHub JSON, with no herdr or network
 
-**Check:** start Codex in another herdr pane: it appears in the Team list within 2 s, and its status changes show up live.
+**Check:** start Codex in another herdr pane: it appears in the Team list within 2 s, and its status changes show up live. Add `status:doing` to an issue on GitHub: the card moves within `check_seconds`. Switch to `source = "tasks-md"`: the board reads the file instead.
 
 ## M3 · World model and lead + workers
 
@@ -68,7 +75,7 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 - [ ] Frame rate option and `F` key (5/10/15/30)
 - [ ] Team-shape interface in the world model, so Part 2 shapes plug in without changing the core
 - [ ] Lead + workers shape: lead at the front desk; `[team] lead` setting
-- [ ] Task handover from a new `doing` row in `TASKS.md`
+- [ ] Task handover when an issue gets `status:doing` and a worker's `agent:` label (or a `doing` row in `TASKS.md`)
 - [ ] Unit tests for the world model with fake events
 
 **Check:** start Claude or Codex: its pet walks to a desk; a `blocked` agent jumps with `❗`; an agent that exits walks out the door.
@@ -96,11 +103,12 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 ## M6 · CLI essentials
 
 - [ ] All office options from the README, with settings order: options > env vars > `settings.toml` > defaults
-- [ ] `status` (`--json`, `--watch`, `--agent`), `doctor`, `config` (`path`, `show`, `get`, `set`)
-- [ ] `setup`: writes settings with a pet per running agent, adds the `tmv send` rule to `CLAUDE.md`/`AGENTS.md`, installs the Claude hook
+- [ ] `status` (`--json`, `--watch`, `--agent`), `doctor` (checks `gh` login and board labels), `config` (`path`, `show`, `get`, `set`)
+- [ ] `task new`, `task take`, `task move`, `task list`, calling `gh` underneath
+- [ ] `setup`: writes settings with a pet per running agent, creates board labels, adds the `tmv send` and `tmv task` rules to `CLAUDE.md`/`AGENTS.md`, installs the Claude hook
 - [ ] Exit codes as in the README; `--no-color` / `NO_COLOR`
 
-**Check:** `tmv status --json` and `tmv doctor` give correct output; `--help` lists every option.
+**Check:** `tmv status --json` and `tmv doctor` give correct output; `tmv task take 12` moves card #12 to Doing on the next check; `--help` lists every option.
 
 ## M7 · Interaction and install
 
@@ -196,6 +204,8 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 ## Changes
 
 Notes about changes to the plan, newest first.
+
+- 2026-10-17: GitHub Issues is the main board (plug-in, `TASKS.md` as the alternative); user-chosen `check_seconds`; `tmv task` commands; agent rules 8 and 9.
 
 - 2026-10-17: Split into Part 1 (fundamentals, lead + workers and pipeline) and Part 2 (other shapes and polish). Custom pets, block pixels, themes and power saving moved to Part 2.
 - 2026-10-17: Milestones created from the README two-day plan and [idea.md](idea.md).
