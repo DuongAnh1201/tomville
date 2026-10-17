@@ -240,3 +240,23 @@ def test_task_move_preserves_all_agent_labels(tmp_path, monkeypatch, column, age
     assert {'agent:codex1', 'agent:claude2', 'bug'} <= labels
     assert {label for label in labels if label.startswith('status:')} == (set() if column == 'done' else {f'status:{column}'})
     assert all(not command[index + 1].startswith('agent:') for command in commands for index, value in enumerate(command) if value == '--remove-label')
+
+
+def test_rebased_office_settings_and_demo_snapshot(tmp_path, monkeypatch):
+    from tomville.tui.app import TomvilleApp
+
+    monkeypatch.setenv('TOMVILLE_LEAD', 'env-lead')
+    settings = load_settings(tmp_path, fps=15, lead='codex1', demo=True)
+
+    async def run():
+        app = TomvilleApp(project=tmp_path, settings=settings, live=False)
+        assert app.world.lead == 'codex1'
+        assert app.fps == 15
+        assert app.reader.snapshot == app.load_snapshot
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.pause()
+            assert set(app.world.pets) == {'claude', 'codex1', 'codex2'}
+            assert set(app.world.cards) == {'T1', 'T2', 'T3'}
+            assert not any(p.script or p.bubbles for p in app.world.pets.values())
+
+    asyncio.run(run())
