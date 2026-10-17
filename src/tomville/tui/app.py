@@ -13,7 +13,7 @@ from tomville.core.settings import load_settings
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Vertical
+from textual.containers import Container, Vertical, VerticalScroll
 from textual.widgets import Footer, Header, RichLog, Static
 
 from tomville.core.sprites import Sprites
@@ -38,19 +38,24 @@ class TeamPanel(Static):
         self.update("No agents yet")
 
 
-class BoardPanel(Static):
+class BoardPanel(VerticalScroll):
     DEFAULT_CSS = """
-    BoardPanel { height: auto; max-height: 15; border: round $secondary; padding: 0 1; }
+    BoardPanel { height: 1fr; min-height: 3; max-height: 15; overflow-y: auto; border: round $secondary; padding: 0 1; }
     """
+
+    def compose(self) -> ComposeResult:
+        yield Static("No cards yet")
 
     def on_mount(self):
         self.border_title = "Board"
-        self.update("No cards yet")
+
+    def update(self, content) -> None:
+        self.query_one(Static).update(content)
 
 
 class EventsPanel(RichLog):
     DEFAULT_CSS = """
-    EventsPanel { height: 1fr; border: round $secondary; }
+    EventsPanel { height: 1fr; min-height: 6; border: round $secondary; }
     """
 
     def on_mount(self) -> None:

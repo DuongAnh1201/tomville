@@ -60,14 +60,14 @@ def test_live_panels_with_offline_sources(tmp_path, monkeypatch):
         async with app.run_test(size=(140, 40)) as pilot:
             await pilot.pause(.15)
             assert 'codex1' in str(app.query_one(TeamPanel).render())
-            assert '[red]literal' in str(app.query_one(BoardPanel).render())
+            assert '[red]literal' in str(app.query_one(BoardPanel).query_one('Static').render())
             current[:] = [replace(agent, status=Status.BLOCKED)]
             await pilot.pause(.1)
             assert 'blocked' in str(app.query_one(TeamPanel).render())
             path.unlink()
             await pilot.pause(.1)
-            assert 'offline since' in str(app.query_one(BoardPanel).render())
-            assert 'T1' in str(app.query_one(BoardPanel).render())
+            assert 'offline since' in str(app.query_one(BoardPanel).query_one('Static').render())
+            assert 'T1' in str(app.query_one(BoardPanel).query_one('Static').render())
             await pilot.press('g')
             assert app.reader.settings.check_seconds == 120
             assert app.query_one(EventsPanel).lines
@@ -182,3 +182,29 @@ def test_cli_rejects_bad_pets(capsys):
         assert exit.value.code == 2
     err = capsys.readouterr().err
     assert "AGENT=PET" in err and "unknown pet" in err
+
+
+def test_short_screen_keeps_latest_events_visible_and_board_scrollable(tmp_path):
+    from rich.text import Text
+    from tomville.core.settings import OfficeSettings
+    from tomville.tui.app import BoardPanel, EventsPanel
+
+    async def run():
+        app = TomvilleApp(project=tmp_path, settings=OfficeSettings(demo=True), live=False)
+        async with app.run_test(size=(140, 24)) as pilot:
+            board = app.query_one(BoardPanel)
+            log = app.query_one(EventsPanel)
+            board.update(Text('\n'.join(f'#{i} task' for i in range(30))))
+            for i in range(20):
+                log.write(f'event {i}')
+            await pilot.pause()
+            assert log.content_size.height >= 4
+            assert log.region.bottom <= app.query_one('#sidebar').region.bottom
+            visible = '\n'.join(log.render_line(y).text for y in range(log.content_size.height))
+            assert 'event 19' in visible
+            assert board.max_scroll_y > 0
+            board.scroll_end(animate=False, immediate=True)
+            await pilot.pause()
+            assert board.scroll_y > 0
+
+    asyncio.run(run())
