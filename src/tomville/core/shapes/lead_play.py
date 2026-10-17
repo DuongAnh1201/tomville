@@ -39,6 +39,9 @@ class LeadPlay:
         steps += [say(f"{task} ready for review" if task else "done"), wait()]
         world.run(pet.name, steps)
 
+    def on_message(self, world: World, sender: str | None, to: str, text: str) -> None:
+        pass  # the envelope walk (World) is all a message does here
+
     def _handover(self, world: World, card: Card) -> None:
         office, lead, worker = world.office, world.lead, card.agent
         desk = office.desks.get(worker) if office else None

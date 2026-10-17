@@ -57,6 +57,16 @@ class EventsPanel(RichLog):
         self.border_title = "Events"
 
 
+def make_world(settings, lead: str | None = None) -> World:
+    """The world for the configured team shape. A pipeline has no boss unless one is set."""
+    from tomville.core.shapes import PipelineShape
+
+    configured = lead if lead is not None else getattr(settings, "lead", None)
+    if getattr(settings, "team", "lead") == "pipeline":
+        return World(shape=PipelineShape(getattr(settings, "stages", ())), lead=configured)
+    return World(lead=configured or "claude")
+
+
 class TomvilleApp(App):
     CSS = """
     #main { layout: horizontal; }
@@ -92,7 +102,7 @@ class TomvilleApp(App):
         self.reader = EventReader(self.project, self.settings)
         self.reader.snapshot = self.load_snapshot
         self.live = live
-        self.world = World(lead=lead if lead is not None else getattr(self.settings, "lead", None) or "claude")
+        self.world = make_world(self.settings, lead)
         self.sprites = sprites or Sprites.from_settings(self.settings)
         self.fps = fps if fps is not None else getattr(self.settings, "fps", DEFAULT_FPS)
         self._frame_timer = None

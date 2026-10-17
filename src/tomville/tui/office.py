@@ -20,6 +20,7 @@ STATUS_STYLE = {
     Status.UNKNOWN: "bold magenta",
 }
 BUBBLE_STYLE = "black on white"
+PARCEL_STYLE = "bold white on blue"
 
 
 class OfficeView(Widget):
@@ -72,6 +73,9 @@ class OfficeView(Widget):
         def put(x: int, y: int, s: str, style: str) -> None:
             rows.setdefault(y, []).append((x, s, style))
 
+        for x, y, label in self.world.parcel_cells():
+            text = f"[{label}]"
+            put(x - cell_len(text) // 2, y, text, PARCEL_STYLE)
         apps = self.world.appearances()
         for a in apps:
             style = STATUS_STYLE[a.status]

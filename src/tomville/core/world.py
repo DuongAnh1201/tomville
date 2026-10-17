@@ -38,6 +38,7 @@ WANDER_SPEED = 1.5
 BUBBLE_SECONDS = 3.0
 SLEEP_AFTER = 60.0  # seconds idle before a pet sleeps
 BLINK_HZ = 2.0
+BELT_SPEED = 6.0  # cells per second for cards riding the pipeline belt
 MAX_BUBBLE = 28  # characters
 
 
@@ -84,12 +85,28 @@ class Appearance:
         return f"{self.name} {self.mark}" if self.mark else self.name
 
 
+@dataclass
+class Parcel:
+    """A card moving through the office on its own, like one riding a belt."""
+
+    label: str
+    x: float
+    y: float
+    path: list[Cell] = field(default_factory=list)
+
+    @property
+    def cell(self) -> Cell:
+        return round(self.x), round(self.y)
+
+
 class Play(Protocol):
-    """What a team shape adds to the world. Both hooks may start scripts."""
+    """What a team shape adds to the world. The hooks may start scripts."""
 
     def on_status(self, world: World, pet: Pet, old: Status, new: Status) -> None: ...
 
     def on_card(self, world: World, card: Card, prev: Card | None) -> None: ...
+
+    def on_message(self, world: World, sender: str | None, to: str, text: str) -> None: ...
 
 
 class NullPlay:
@@ -97,6 +114,9 @@ class NullPlay:
         pass
 
     def on_card(self, world, card, prev) -> None:
+        pass
+
+    def on_message(self, world, sender, to, text) -> None:
         pass
 
 
@@ -114,6 +134,7 @@ class World:
         self.play: Play = play() if play else NullPlay()
         self.pets: dict[str, Pet] = {}
         self.cards: dict[str, Card] = {}
+        self.parcels: dict[str, Parcel] = {}
         self.office: OfficeMap | None = None
         self.size: Cell = (0, 0)
         self.time = 0.0
@@ -156,7 +177,9 @@ class World:
         elif isinstance(event, CardRemoved):
             self.cards.pop(event.id, None)
         elif isinstance(event, MessageSent):
-            self._message(event.message.sender, event.message.to, event.message.text)
+            m = event.message
+            self._message(m.sender, m.to, m.text)
+            self.play.on_message(self, m.sender, m.to, m.text)
 
     def _appeared(self, agent: Agent) -> None:
         if agent.name in self.pets:
@@ -277,8 +300,38 @@ class World:
 
     # --- time -------------------------------------------------------------
 
+    def move_parcel(self, label: str, goal: Cell, start: Cell | None = None) -> None:
+        """Send a card to `goal` in a straight line (along x, then y), from `start` if new."""
+        parcel = self.parcels.get(label)
+        if parcel is None:
+            sx, sy = start or goal
+            parcel = self.parcels[label] = Parcel(label, sx, sy)
+        x, y = parcel.cell
+        gx, gy = goal
+        step = 1 if gx >= x else -1
+        path = [(cx, y) for cx in range(x + step, gx + step, step)] if gx != x else []
+        step = 1 if gy >= y else -1
+        path += [(gx, cy) for cy in range(y + step, gy + step, step)] if gy != y else []
+        parcel.path = path
+
+    def parcel_cells(self) -> list[tuple[int, int, str]]:
+        return [(*p.cell, p.label) for p in self.parcels.values()]
+
     def tick(self, dt: float) -> None:
         self.time += dt
+        for parcel in self.parcels.values():
+            budget = BELT_SPEED * dt
+            while parcel.path and budget > 0:
+                tx, ty = parcel.path[0]
+                d = abs(tx - parcel.x) + abs(ty - parcel.y)
+                if d <= budget:
+                    parcel.x, parcel.y = tx, ty
+                    parcel.path.pop(0)
+                    budget -= d
+                else:
+                    parcel.x += (tx - parcel.x) / d * budget
+                    parcel.y += (ty - parcel.y) / d * budget
+                    budget = 0
         for pet in list(self.pets.values()):
             self._bubble_time(pet, dt)
             self._move(pet, dt)
