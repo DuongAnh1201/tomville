@@ -19,7 +19,7 @@ Two ways to use it, built in this order:
 | 2. Publish | One-line install, like herdr: `curl -fsSL …/install.sh \| sh`, plus PyPI | Right after the weekend |
 | 3. Web UI | The same office in a browser: `tmv web` | Later |
 
-Both the CLI and the web UI use one shared core (status poller, world model, sprites, settings), so the web UI adds a new front end, not a second app. See [Roadmap](#roadmap).
+Both the CLI and the web UI use one shared core (event reader, world model, sprites, settings), so the web UI adds a new front end, not a second app. See [Roadmap](#roadmap).
 
 ## Prerequisites
 
@@ -120,26 +120,49 @@ If `[team]` is missing, Tomville uses the lead shape with the first agent it see
 
 Other shapes (pair/reviewer, parallel fan-out with worktrees, peer group, across machines) are in [Later](#later-any-phase).
 
+## Who talks to whom
+
+herdr shows what each agent is doing, but not who sent a prompt to whom: when the lead runs `herdr agent prompt codex1 "..."`, only the lead gets a reply, and herdr's event stream has no "prompt sent" event or sender field (checked against the herdr 0.9.5 API schema). Tomville records messages itself, in a log both shapes use:
+
+| Way | How it works | Reliability |
+| --- | --- | --- |
+| `tmv send` | Agents send work with `tmv send codex1 "Fix the login test"`. Tomville finds the sender from `HERDR_PANE_ID` (herdr sets it in every pane), calls `herdr agent prompt` itself and appends the message to the log | Exact, when agents use it. `tmv setup` adds a short rule to the project's `CLAUDE.md` and `AGENTS.md` telling agents to use it |
+| Claude Code hook | A `PreToolUse` hook on Bash catches any `herdr agent prompt …` Claude runs directly and logs it with the sender's pane | Exact for Claude as sender, even if it forgets `tmv send`. `tmv setup` installs it. Codex: check whether it has an equivalent hook |
+| Timing guess | Sender was `working`, then the target became `working` within a few seconds | Fallback only; shown as `? → codex1` |
+
+The log is one JSON line per message in `.tomville/messages.jsonl` in the project:
+
+```json
+{"time": "2026-10-17T10:42:03Z", "from": "claude", "to": "codex1", "text": "Fix the login test", "via": "send"}
+```
+
+What you see:
+
+- The sender's pet walks to the target's desk carrying `✉`; a speech bubble shows the start of the prompt.
+- The Events panel shows `10:42 claude → codex1: Fix the login test`.
+- In the pipeline shape, a logged handoff moves the card at once; the timing guess is used only when there is no log line.
+- An unknown sender shows as `?`, so the office never claims more than it knows.
+
 ## Architecture
 
 ```
- herdr agent list (JSON)  ─┐
-                           ├─▶  State poller  ─▶  World model  ─▶  Renderer (Textual)  ─▶  screen
- TASKS.md (mtime check)   ─┘     every 1 s         pets, zones,       sprite frames,
-                                                   targets, paths     frame timer
-                                                         ▲
-                                     settings.toml ──────┘  (fps, sprite style, pets)
+ herdr events (status changes) ─┐
+ messages.jsonl (tmv send, hook)├─▶  Event reader  ─▶  World model  ─▶  Renderer (Textual)  ─▶  screen
+ TASKS.md (mtime check)         ─┘                      pets, zones,       sprite frames,
+                                                        targets, paths     frame timer
+                                                              ▲
+                                          settings.toml ──────┘  (fps, sprite style, pets)
 ```
 
 | Part | Job |
 | --- | --- |
-| State poller | Runs `herdr agent list` every 1 s and reads `TASKS.md` when it changes. Turns them into events: "codex1 became blocked", "T1 moved to review" |
+| Event reader | Runs `herdr agent list` once at start, then listens to herdr's live event stream (`pane.agent_status_changed`, `pane.agent_detected`, `pane.closed`) instead of polling. Also follows the message log and reads `TASKS.md` when it changes. Turns them into events: "codex1 became blocked", "claude → codex1: Fix the login test", "T1 moved to review". Falls back to polling `herdr agent list` every `poll_seconds` if the stream drops |
 | World model | Holds each pet's position, target zone and current animation. Events change targets; it does not draw anything |
 | Movement | Each tick, a pet steps one cell toward its target: first along x, then along y, around walls |
 | Renderer | A Textual widget that draws the office map, then each pet's current frame at its position. Textual only redraws changed cells |
 | Settings | `settings.toml`, changed in the app with hotkeys or from the shell with `tmv config set` |
 
-The renderer never calls herdr directly, and the poller never draws. That keeps the game part testable with fake events and no agents running.
+The renderer never calls herdr directly, and the event reader never draws. That keeps the game part testable with fake events and no agents running.
 
 ## Frame rate option
 
@@ -354,7 +377,7 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `--board FILE` | path | A board file other than `TASKS.md` |
 | `--layout L` | `auto` `landscape` `portrait` | Force a layout |
 | `--team SHAPE` | `lead` `pipeline` | Team shape for this run (see [Team shapes](#team-shapes)) |
-| `--poll SEC` | number | How often to ask herdr for status (default 1) |
+| `--poll SEC` | number | Polling interval if herdr's event stream is unavailable (default 1) |
 | `--demo` | | Fake agents and tasks; works without herdr. Good for trying pets and themes |
 | `--still` | | No animation; pets jump straight to their zone |
 
@@ -362,6 +385,7 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 
 | Command | What it does | Useful options |
 | --- | --- | --- |
+| `send AGENT TEXT` | Prompt another agent and log who sent it (see [Who talks to whom](#who-talks-to-whom)). For agents to use instead of `herdr agent prompt` | `--wait`, `--timeout MS` (passed to herdr) |
 | `status` | Print the team and board once, then exit. Like `claude -p`: no app opens | `--json`, `--watch [SEC]` (reprint every N s), `--agent NAME` |
 | `doctor` | Check the setup and print fixes | `--json` |
 | `setup` | Calibrate emoji width and write settings with a pet per running agent | `--yes` (accept defaults, no questions), `--style`, `--theme` |
@@ -489,7 +513,8 @@ tomville/
   src/tomville/
     cli.py           # argparse: office options + status, doctor, setup, pets, theme, config
     core/            # shared by CLI and web; no UI code here
-      poller.py      # herdr agent list + TASKS.md -> events
+      events.py      # herdr event stream + messages.jsonl + TASKS.md -> events
+      messages.py    # tmv send, message log, hook entry point
       world.py       # pets, zones, targets, movement
       sprites.py     # load sprite files, palette, width check
       settings.py    # read/write settings.toml
@@ -515,7 +540,7 @@ User files live outside the package, so updates never overwrite them: `~/.config
 | Block | Build | Done when |
 | --- | --- | --- |
 | Morning | Project skeleton, `pyproject.toml`, office map, Textual layout (office + Team + Board + Events) | `tomville` opens the empty office |
-| Midday | Poller: `herdr agent list` + `TASKS.md` into events | Team list and board show real data |
+| Midday | Event reader: `herdr agent list` + herdr event stream + `TASKS.md` into events | Team list and board show real data |
 | Afternoon | World model: zones, status-to-behaviour table, cell-by-cell movement, fps option (`F`); lead + workers shape | Pets walk to their desk when you start Claude or Codex |
 | Evening | Emoji and ASCII sprites, built-in cat, dog and sheep | Style switch (`S`) works; tests for the world model pass |
 
@@ -523,7 +548,7 @@ User files live outside the package, so updates never overwrite them: `~/.config
 
 | Block | Build | Done when |
 | --- | --- | --- |
-| Morning | Pipeline shape: conveyor office map, `[team]` settings, `--team`, handoff detection | A card rides the belt from planner to coder to tester |
+| Morning | Pipeline shape: conveyor office map, `[team]` settings, `--team`; `tmv send`, message log, Claude Code hook; handoff detection | `tmv send` moves an envelope and a card from planner to coder to tester |
 | Midday | Block-pixel sprite format with palettes; custom pets folder; `pets list`, `pets show`, `pets new`, `pets check` | Your own fox walks around in its colours |
 | Afternoon | Themes (`T`), agent colours, emoji width check and calibration screen | Map stays aligned on the 11-inch screen |
 | Evening | CLI: office options, `status` (with `--json`, `--watch`), `doctor`, `setup`, `config`, `theme list`; `tmv` alias | `tmv status --json` and `tmv doctor` work; `--help` lists every option |
@@ -589,17 +614,19 @@ Rules for phase 1 that keep phase 3 easy:
 
 | Risk | Effect | Fallback |
 | --- | --- | --- |
-| `herdr agent list` output changes in a herdr update | Pets freeze or vanish | The poller is one small file; test after `herdr update` |
+| `herdr agent list` output changes in a herdr update | Pets freeze or vanish | The event reader is one small file; test after `herdr update` |
 | Emoji width differs on the tablet font | Map tiles shift | Calibration screen; ASCII style |
-| Pipeline handoffs are guessed from status timing | A card moves at the wrong time | 30 s window is a setting; agents can also move cards in `TASKS.md` |
+| Agents call `herdr agent prompt` directly instead of `tmv send` | Sender unknown (`?`) | Rule in `CLAUDE.md`/`AGENTS.md`; Claude hook logs it anyway; timing guess as fallback |
 | Battery drain under PRoot | Tablet gets warm | 10 fps default; auto 2 fps when idle; 5 fps saver |
-| Polling herdr every second costs CPU | Slower agents | Raise `poll_seconds` to 2–3 (`--poll 3`) |
+| herdr event stream drops or changes | Pets stop updating | Fall back to polling `herdr agent list`; raise `poll_seconds` to 2–3 (`--poll 3`) |
 | Repo stays private | Others cannot install it | Phase 2, step 7: make it public |
 | `install.sh` runs on unknown machines | Install fails or surprises users | Script stays short and readable; it only installs `uv` and the app |
 
 ## Decided
 
 - Name: Tomville. Command `tomville`, short alias `tmv`; settings in `~/.config/tomville/`.
+- Messages are logged by Tomville (`tmv send` + Claude Code hook), because herdr does not record senders.
+- Status comes from herdr's event stream, with polling as a fallback.
 - v1 team shapes: lead + workers, and pipeline. Other shapes come later.
 - Tomville builds on top of herdr, not as a replacement. herdr still runs the panes, sessions and agent status; Tomville reads that status and draws it, running in its own herdr tab.
 - v1 is watch-only; the prompt box comes later.
