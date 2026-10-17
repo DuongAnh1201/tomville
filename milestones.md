@@ -74,6 +74,10 @@ Done 2026-10-17 · PR #11
 
 Validation 2026-10-17: 18 tests pass. Live headless app loaded the running Codex, observed a GitHub label move within 10 s, and loaded the Markdown source. No live status transition occurred during the observation window; socket lifecycle/status/disconnect paths are covered offline. Lead must finish the visual start/status Check before marking M2 done.
 
+Lead Check 2026-10-17: ran this branch in its own herdr tab. The Team panel showed claude, codex1 and claude2 at start; the Events panel logged live changes ("claude became idle", "claude2 became done").
+
+Done 2026-10-17 · PR #15
+
 ## M3 · World model and lead + workers
 
 - [ ] Zones and the status-to-behaviour table from the README
