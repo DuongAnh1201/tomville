@@ -53,6 +53,8 @@ Goal: a real office you use every day, with lead + workers and pipeline teams. T
 
 **Check:** `tmv` opens the empty office in a herdr tab at ~140 × 40, and `q` quits cleanly.
 
+Done 2026-10-17 · PR #11
+
 ## M2 · Event reader (real data)
 
 - [ ] Read `herdr agent list` once at start into a typed model
