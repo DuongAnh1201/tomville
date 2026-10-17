@@ -15,9 +15,9 @@ Part 2 starts only after Part 1 is done.
 
 1. **Pick the first milestone that isn't done.** Work on its tasks in order unless the lead says otherwise.
 2. **Tick a task (`[ ]` → `[x]`) only when it works**, not when the code is written. Run what the task says, or the milestone's **Check**.
-3. **A milestone is done only when its Check passes.** Then write the date and commit after it: `Done 2026-10-17 · a1b2c3d`.
+3. **A milestone is done only when its Check passes.** Then write the date and PR after it: `Done 2026-10-17 · PR #12`.
 4. **If stuck, don't tick it.** Add a line under the task starting with `Blocked:`, saying what is wrong, and tell the lead.
-5. **Commit this file with the work it describes**, in the same commit.
+5. **Update this file in the same PR as the work it describes.** Nobody works on `main`: every change is a branch and a PR linked to an issue, followed by a detailed comment on the issue (see [AGENTS.md](AGENTS.md)).
 6. **Don't rewrite or reorder milestones.** If the plan needs to change, add a note under **Changes** at the bottom and tell the lead.
 7. Tests (`uv run pytest`) must pass before any tick.
 8. **Work items live in GitHub Issues.** Take a task with `tmv task take N` (or `gh issue edit N --add-label status:doing,agent:<you>` before `tmv task` exists). Close it with `Fixes #N` in the commit.
@@ -210,6 +210,7 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-17: No work on `main` for anyone; every change is a PR linked to an issue, with a detailed issue comment; the lead checks conflicts and squash-merges (#7).
 - 2026-10-17: Issues #1–#6 opened, one per milestone M1–M6, as the board for this build. `AGENTS.md` and `CLAUDE.md` added with the team rules.
 - 2026-10-17: First run is "create a new ville" (`tmv new`, saved in `.tomville/ville.toml`). Lead + workers layout designed: boss on top with the board, named worker desks facing it, handover with bubbles (M1, M3, M6).
 - 2026-10-17: Pixel-art pets from online sets (`pets import`, big mode, pet gallery) saved as a later update in [idea.md](idea.md#later-updates); not in any milestone. Pets stay built-in for now.

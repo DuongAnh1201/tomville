@@ -16,22 +16,73 @@ When these disagree, `milestones.md` wins for scope and `idea.md` for decisions.
 
 | Agent | Role |
 | --- | --- |
-| `claude` | **Lead.** Hands out issues, reviews and merges PRs, ticks `milestones.md` on `main` |
+| `claude` | **Lead.** Hands out issues, checks PRs for conflicts, reviews and merges them; works on branches and PRs like everyone else |
 | `claude2` | Worker: visual side (world model, movement, sprites, `tmv new`) |
 | `codex1` | Worker: data side (herdr events, GitHub board, CLI commands) |
 
 Only the lead sends prompts to other agents. Workers don't control other herdr panes.
 
+## Never work on `main`
+
+This applies to **everyone, the lead included**, and to every change, even a one-line doc fix.
+
+- Work only on a branch: in your own git worktree (workers) or a short-lived branch (lead). Never commit to `main` and never push to `main`.
+- Name branches after the issue: `m2-events`, `fix-12-board-offline`, `docs/pr-workflow`.
+- Before you start, check: `git branch --show-current` must not print `main`.
+
+## Every change: issue → branch → PR → comment → merge
+
+1. **Issue first.** Every piece of work has an issue. No issue yet? Create one (`gh issue create`).
+2. **Branch** from the latest `main` (`git fetch origin && git switch -c <branch> origin/main`).
+3. **PR, always linked to the issue.** Push the branch and open a PR with `Fixes #N` in the body (use `Refs #N` if the PR only does part of the issue). No PR without an issue link.
+4. **Detailed comment on the issue** as soon as the PR solves it (template below). The lead does not merge until this comment is there.
+5. **The lead checks and merges** (see [For the lead](#for-the-lead)).
+
+### Issue comment template
+
+Post it with `gh issue comment N --body-file <file>`:
+
+```markdown
+## Solved in #<PR>
+
+**What changed**
+- <each change, in plain words>
+
+**Files**
+- `path/to/file.py`: <what and why>
+
+**How I tested**
+- `uv run pytest`: <N passed>
+- Milestone Check: <what you ran and what you saw>
+
+**Decisions**
+- <choices you made and why; anything that differs from idea.md or the README>
+
+**Not done / follow-ups**
+- <left out, known issues, new issues opened: #N>
+```
+
+## For the lead
+
+When a PR is opened:
+
+1. **Check for conflicts:** `gh pr view P --json mergeable,mergeStateStatus`.
+   - `CONFLICTING`: ask the author to update their branch (`git fetch origin && git rebase origin/main`, fix the conflicts, `git push --force-with-lease`), then check again. Resolve it yourself only if the author is gone.
+   - `MERGEABLE`: go on.
+2. **Review:** read the diff (`gh pr diff P`), run `uv run pytest` and the milestone Check on the PR branch.
+3. **Check the issue comment** exists and is complete.
+4. **Merge if possible:** `gh pr merge P --squash --delete-branch`. `Fixes #N` closes the issue.
+5. If it can't be merged (failing tests, missing comment, wrong scope), comment on the PR with what's needed and tell the author.
+
 ## Where you work
 
-- Work only in **your own git worktree and branch** (the lead creates them). Never commit to `main` and never push to `main`.
 - Stay inside your issue's milestone. Shared types (`src/tomville/core/models.py`) and plug-in interfaces change only through the lead: if you need a change, say so in your PR.
 - Found a bug or idea outside your issue? Open an issue (`gh issue create --label bug` or `--label idea`) instead of fixing it now.
 
 ## The board: GitHub Issues
 
 - **Take an issue:** `gh issue edit N --add-label status:doing,agent:<you> --remove-label status:todo`
-- **Ready for review:** push your branch, open a PR with `Fixes #N` in the body, then `gh issue edit N --add-label status:review --remove-label status:doing`
+- **Ready for review:** push your branch, open a PR with `Fixes #N` in the body, post the detailed issue comment, then `gh issue edit N --add-label status:review --remove-label status:doing`
 - Once `tmv task` exists (M6), use `tmv task take N` / `tmv task move N review` instead.
 
 ## Done means tested
@@ -56,5 +107,5 @@ Only the lead sends prompts to other agents. Workers don't control other herdr p
 
 The lead reads the end of your output. Finish every task with one line:
 
-- `DONE #N: <PR URL>`
+- `DONE #N: <PR URL>` (only after the PR is open and the issue comment is posted)
 - `BLOCKED #N: <what is wrong and what you need>`
