@@ -11,6 +11,18 @@ Build a terminal app where each agent (Claude, Codex) is a pixel pet walking aro
 - **Options:** frame rate, sprite style (emoji, ASCII, block pixels), and a pet for each agent.
 - **Built with:** Python + [Textual](https://textual.textualize.io/), running in its own herdr tab.
 
+## Prerequisites
+
+All in place on the development tablet (Ubuntu 26.04 in Termux PRoot, aarch64):
+
+- [x] herdr 0.9.5 in `~/.local/bin`, on `PATH`
+- [x] herdr integrations for Claude and Codex (`herdr integration install claude|codex`)
+- [x] herdr agent skill in `~/.claude/skills/herdr/SKILL.md`
+- [x] Claude Code and Codex CLI, both logged in
+- [x] `gh` logged in, with access to this repo
+
+Still needed at build time: Python 3.11+ and `uv` (install steps in [Install](#install)).
+
 ## What it looks like
 
 Landscape on an 11-inch tablet, about 140 × 40 cells:
@@ -28,7 +40,7 @@ Landscape on an 11-inch tablet, about 140 × 40 cells:
 │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │ 10:42 codex1 needs approval    │
 │                                                                │ 10:40 claude assigned T2       │
 └────────────────────────────────────────────────────────────────┴────────────────────────────────┘
- [F]ps 10  [S]prites emoji  [Tab] next agent  [Enter] open pane  [?] help
+ [F]ps 10  [S]prites emoji  [T]heme night  [Tab] next agent  [Enter] open pane  [?] help
 ```
 
 In portrait, the sidebar moves under the office floor.
@@ -51,7 +63,7 @@ When the lead assigns a task (a new `doing` row in `TASKS.md`), the lead pet wal
 ```
  herdr agent list (JSON)  ─┐
                            ├─▶  State poller  ─▶  World model  ─▶  Renderer (Textual)  ─▶  screen
- TASKS.md (file watch)    ─┘     every 1 s         pets, zones,       sprite frames,
+ TASKS.md (mtime check)   ─┘     every 1 s         pets, zones,       sprite frames,
                                                    targets, paths     frame timer
                                                          ▲
                                      settings.toml ──────┘  (fps, sprite style, pets)
@@ -63,7 +75,7 @@ When the lead assigns a task (a new `doing` row in `TASKS.md`), the lead pet wal
 | World model | Holds each pet's position, target zone and current animation. Events change targets; it does not draw anything |
 | Movement | Each tick, a pet steps one cell toward its target: first along x, then along y, around walls |
 | Renderer | A Textual widget that draws the office map, then each pet's current frame at its position. Textual only redraws changed cells |
-| Settings | `settings.toml`, editable in the app with hotkeys |
+| Settings | `settings.toml`, changed in the app with hotkeys or from the shell with `pxo config set` |
 
 The renderer never calls herdr directly, and the poller never draws. That keeps the game part testable with fake events and no agents running.
 
@@ -111,7 +123,7 @@ Press `S` to cycle through styles. Each pet has the same frames in each style.
 | ASCII | `^^` | `^^` / `^-` | `^^#` | Works on every font |
 | Block pixel | `▟▙` | `▟▙` / `▙▟` | `▟▙▒` | Most "retro game" |
 
-Sprites live in plain text files, one folder per pet, so you can draw your own:
+Sprites are plain text files, one folder per pet. Built-in pets ship inside the package; your own go in `~/.config/pixel-office/sprites/` (see [Custom pets and colours](#custom-pets-and-colours)):
 
 ```
 src/pixel_office/data/sprites/
@@ -122,7 +134,7 @@ src/pixel_office/data/sprites/
   dog/ ...
 ```
 
-`settings.toml`:
+`~/.config/pixel-office/settings.toml`:
 
 ```toml
 fps = 10
@@ -227,7 +239,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv tool install git+https://github.com/DuongAnh1201/pixel-office
 ```
 
-This needs the repo to be public, or `gh` logged in with access to it. Update with `uv tool upgrade pixel-office`; remove with `uv tool uninstall pixel-office`. Settings in `~/.config/pixel-office/` stay.
+While the repo is private, this works only where `gh` is logged in with access (as on the development tablet). Make the repo public before sharing it. Update with `uv tool upgrade pixel-office`; remove with `uv tool uninstall pixel-office`. Settings in `~/.config/pixel-office/` stay.
 
 ## CLI
 
@@ -391,8 +403,10 @@ pixel-office/
   pyproject.toml
   README.md
   src/pixel_office/
-    cli.py           # argparse commands: run, setup, doctor, pets
+    cli.py           # argparse: office options + status, doctor, setup, pets, theme, config
     app.py           # Textual app, layout, keys
+    office.py        # renderer: office map + sprites widget
+    status.py        # status output, text and JSON
     doctor.py        # checks shared by doctor and setup
     poller.py        # herdr agent list + TASKS.md -> events
     world.py         # pets, zones, targets, movement
@@ -448,11 +462,16 @@ Each day ends with a usable app.
 | `herdr agent list` output changes in a herdr update | Pets freeze or vanish | The poller is one small file; test after `herdr update` |
 | Emoji width differs on the tablet font | Map tiles shift | Calibration screen; ASCII style |
 | Battery drain under PRoot | Tablet gets warm | 10 fps default; auto 2 fps when idle; 5 fps saver |
-| Polling herdr every second costs CPU | Slower agents | Raise `poll_seconds` to 2–3 |
+| Polling herdr every second costs CPU | Slower agents | Raise `poll_seconds` to 2–3 (`--poll 3`) |
+| Repo stays private | Others cannot install it | Make it public before sharing |
+
+## Decided
+
+- v1 is watch-only; the prompt box comes later.
+- Built-in pets: cat, dog, sheep. Built-in themes: night, game-boy, green-screen.
+- Landscape first; portrait stacks the sidebar under the office.
 
 ## Open questions
 
-- [ ] Which pet for each agent?
-- [ ] Landscape only, or also portrait?
-- [ ] Office theme: plain office, a farm (fits the herdr sheep), or space?
-- [ ] Should v1 include the prompt box, or stay watch-only?
+- [ ] Which pet and colour for each agent?
+- [ ] Public repo now, or after the two days?
