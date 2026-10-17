@@ -11,6 +11,16 @@ Build a terminal app where each agent (Claude, Codex) is a pixel pet walking aro
 - **Options:** frame rate, sprite style (emoji, ASCII, block pixels), and a pet for each agent.
 - **Built with:** Python + [Textual](https://textual.textualize.io/), running in its own herdr tab.
 
+Two ways to use it, built in this order:
+
+| Phase | What | When |
+| --- | --- | --- |
+| 1. CLI | `pixel-office` / `pxo`: the office in the terminal, plus one-shot commands | The two-day weekend build |
+| 2. Publish | One-line install, like herdr: `curl -fsSL …/install.sh \| sh`, plus PyPI | Right after the weekend |
+| 3. Web UI | The same office in a browser: `pxo web` | Later |
+
+Both the CLI and the web UI use one shared core (status poller, world model, sprites, settings), so the web UI adds a new front end, not a second app. See [Roadmap](#roadmap).
+
 ## Prerequisites
 
 All in place on the development tablet (Ubuntu 26.04 in Termux PRoot, aarch64):
@@ -166,7 +176,7 @@ Colours and your own pet designs are covered in [Custom pets and colours](#custo
 | `T` | Cycle colour themes |
 | `?` | Help |
 
-v1 only watches. Approvals still happen in the agent's own pane: the blocked pet tells you where to go, and `Enter` takes you there. Sending prompts from the app comes later (see [Later](#later-not-in-the-two-days)).
+v1 only watches. Approvals still happen in the agent's own pane: the blocked pet tells you where to go, and `Enter` takes you there. Sending prompts from the app comes later (see [Later](#later-any-phase)).
 
 ## Custom pets and colours
 
@@ -234,12 +244,28 @@ One command installs it, and `pixel-office doctor` shows the whole setup in the 
 
 ### Install
 
+After publishing (phase 2), one line, the same way herdr installs:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DuongAnh1201/pixel-office/main/install.sh | sh
+```
+
+Or, for people who already use Python tools:
+
+```bash
+uv tool install pixel-office     # or: pipx install pixel-office
+```
+
+Update with `pxo update`; remove with `pxo uninstall`. Settings in `~/.config/pixel-office/` stay.
+
+During the weekend build (phase 1), install straight from GitHub:
+
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv tool install git+https://github.com/DuongAnh1201/pixel-office
 ```
 
-While the repo is private, this works only where `gh` is logged in with access (as on the development tablet). Make the repo public before sharing it. Update with `uv tool upgrade pixel-office`; remove with `uv tool uninstall pixel-office`. Settings in `~/.config/pixel-office/` stay.
+While the repo is private, this works only where `gh` is logged in with access, as on the development tablet.
 
 ## CLI
 
@@ -293,6 +319,9 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `theme list` | Preview all themes | |
 | `config path` / `config show` | Print the settings file location or contents | |
 | `config get KEY` / `config set KEY VALUE` | Read or change one setting, e.g. `config set fps 15` | |
+| `update` (phase 2) | Upgrade to the latest release, like `herdr update` | `--check` (only report) |
+| `uninstall` (phase 2) | Remove the app; keep or delete settings | `--purge` (also delete `~/.config/pixel-office/`) |
+| `web` (phase 3) | Serve the office in a browser | `--port 8787`, `--host 127.0.0.1` |
 | `completion SHELL` (later) | Print tab-completion for `bash`, `zsh` or `fish` | |
 
 ### Where settings come from
@@ -402,16 +431,21 @@ Dependencies: `textual` and `tomli-w` only.
 pixel-office/
   pyproject.toml
   README.md
+  install.sh         # one-line installer (phase 2)
+  CHANGELOG.md
   src/pixel_office/
     cli.py           # argparse: office options + status, doctor, setup, pets, theme, config
-    app.py           # Textual app, layout, keys
-    office.py        # renderer: office map + sprites widget
-    status.py        # status output, text and JSON
-    doctor.py        # checks shared by doctor and setup
-    poller.py        # herdr agent list + TASKS.md -> events
-    world.py         # pets, zones, targets, movement
-    sprites.py       # load sprite files, palette, width check
-    settings.py      # read/write settings.toml
+    core/            # shared by CLI and web; no UI code here
+      poller.py      # herdr agent list + TASKS.md -> events
+      world.py       # pets, zones, targets, movement
+      sprites.py     # load sprite files, palette, width check
+      settings.py    # read/write settings.toml
+      doctor.py      # checks shared by doctor and setup
+    tui/             # phase 1: terminal front end
+      app.py         # Textual app, layout, keys
+      office.py      # renderer: office map + sprites widget
+      status.py      # status output, text and JSON
+    web/             # phase 3: browser front end
     data/
       sprites/       # built-in pets: cat, dog, sheep
       themes/        # night, game-boy, green-screen
@@ -443,17 +477,58 @@ User files live outside the package, so updates never overwrite them: `~/.config
 
 If day 1 runs late, drop block-pixel sprites from day 2 first: emoji and ASCII are enough to use the app.
 
-## Later (not in the two days)
+Each day ends with a usable app.
+
+## Roadmap
+
+### Phase 2: publish the CLI (right after the weekend)
+
+Goal: anyone installs it with one line, updates with `pxo update`, the same experience as herdr.
+
+| Step | What | Done when |
+| --- | --- | --- |
+| 1. Name | Check `pixel-office` is free on PyPI; pick a licence (MIT suggested) | Name and `LICENSE` in the repo |
+| 2. Package | Version `0.1.0` in `pyproject.toml`, `CHANGELOG.md`, project links | `uv build` makes a wheel that installs cleanly |
+| 3. Installer | `install.sh`: checks OS and arch, installs `uv` if missing, runs `uv tool install pixel-office`, prints the PATH line if needed | Works on Ubuntu (x86_64 and aarch64), macOS, Termux PRoot |
+| 4. Update and uninstall | `pxo update` and `pxo uninstall` call `uv tool upgrade/uninstall` | Update from 0.1.0 to 0.1.1 works |
+| 5. CI | GitHub Actions: lint and tests on every push | Green check on `main` |
+| 6. Release | Push tag `v0.1.0` → Actions builds, publishes to PyPI (trusted publishing, no token) and creates a GitHub Release with the changelog | `uv tool install pixel-office` works on a clean machine |
+| 7. Go public | Make the repo public; README starts with the one-line install | The install line works for anyone |
+
+How it compares to herdr:
+
+| | herdr | Pixel Office |
+| --- | --- | --- |
+| One-line install | `curl -fsSL https://herdr.dev/install.sh \| sh` | `curl -fsSL https://raw.githubusercontent.com/DuongAnh1201/pixel-office/main/install.sh \| sh` |
+| What it installs | A Rust binary per platform | A Python app via `uv`, any platform with Python 3.11+ |
+| Self-update | `herdr update` | `pxo update` |
+| Releases | GitHub Releases | GitHub Releases + PyPI |
+
+A short install domain (like `herdr.dev`) and standalone binaries without Python are optional extras for later.
+
+### Phase 3: web UI (later)
+
+The same office in a browser, for a bigger screen or to watch from another device.
+
+| Step | What |
+| --- | --- |
+| 1. Quick version | `pxo web` runs the existing Textual app in the browser with `textual serve`. Almost no new code |
+| 2. Real web UI | A small server (FastAPI) streams world events from `core/` over a WebSocket; the page draws pets on a pixel canvas, with real pixel art instead of characters |
+| 3. Extras | Drag-and-drop board, pet editor in the browser, view from a phone on the same Wi-Fi |
+
+Rules for phase 1 that keep phase 3 easy:
+
+- All logic lives in `core/`; `tui/` only draws and handles keys.
+- The world model emits plain events (dicts), so the web server can send the same events as JSON.
+- `status --json` uses the same event format, so it doubles as the web API's data shape.
+
+### Later (any phase)
 
 - Pet editor: paint pets by tapping cells.
 - Prompt box that sends tasks to the lead (`herdr agent prompt claude "..."`).
 - GitHub Projects board instead of `TASKS.md`.
 - Full setup wizard with live previews; more themes.
-- PyPI release (`uv tool install pixel-office`) and GitHub Actions CI.
-- Web version through Textual's browser mode.
 - Shell tab-completion (`pixel-office completion bash|zsh|fish`).
-
-Each day ends with a usable app.
 
 ## Risks
 
@@ -463,7 +538,9 @@ Each day ends with a usable app.
 | Emoji width differs on the tablet font | Map tiles shift | Calibration screen; ASCII style |
 | Battery drain under PRoot | Tablet gets warm | 10 fps default; auto 2 fps when idle; 5 fps saver |
 | Polling herdr every second costs CPU | Slower agents | Raise `poll_seconds` to 2–3 (`--poll 3`) |
-| Repo stays private | Others cannot install it | Make it public before sharing |
+| Repo stays private | Others cannot install it | Phase 2, step 7: make it public |
+| `pixel-office` is taken on PyPI | Cannot publish under that name | Pick another name before phase 2; keep `pxo` as the command |
+| `install.sh` runs on unknown machines | Install fails or surprises users | Script stays short and readable; it only installs `uv` and the app |
 
 ## Decided
 
@@ -474,4 +551,5 @@ Each day ends with a usable app.
 ## Open questions
 
 - [ ] Which pet and colour for each agent?
-- [ ] Public repo now, or after the two days?
+- [ ] Licence: MIT, or another?
+- [ ] Package name, if `pixel-office` is taken on PyPI.
