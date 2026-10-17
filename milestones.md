@@ -96,6 +96,10 @@ Done 2026-10-17 · PR #15
 
 Checked with fake events (`tests/test_world.py`, `tests/test_app.py`) and live in a herdr tab: claude, codex1 and claude2 sit at their desks and the board shows real cards. The live `blocked`, exit and `agent:` label steps are not run yet, so no `Done` line.
 
+Lead Check 2026-10-17 (#25): live in a herdr tab. Labelling a new issue `agent:codex1` sent the boss to codex1's desk with "#26 is yours", then codex1 said "checking issues…". A temporary agent (`tmpbot`) got its own named desk when it started, and walked out through the door when it stopped. The `blocked` ❗ jump was seen in the rendered office with demo data (no real agent was blocked during the check).
+
+Done 2026-10-17 · PR #14
+
 ## M4 · Sprites
 
 - [x] Sprite file format (frames separated by `---`)
@@ -116,10 +120,15 @@ Checked with fake events (`tests/test_world.py`, `tests/test_app.py`) and live i
 
 **Check:** in lead + workers, `tmv send codex1 "…"` walks an envelope from lead to worker. With planner, coder and tester running in herdr, `tmv send` moves a card along the belt, and an unlogged handoff shows `?`.
 
+Lead Check 2026-10-17: live, `tmv send claude2 …` walked the boss with ✉ to claude2's desk (#18). In a pipeline of two real agents (`claude` → `claude2`), a `tmv send` moved card `[#5]` along the belt (#22). The unlogged `?` handoff and the drop into DONE are covered by tests (they need real status changes between two stages).
+
+Done 2026-10-17 · PR #18, PR #22
+
 ## M6 · CLI essentials
 
-- [ ] All office options from the README, with settings order: options > env vars > `settings.toml` > defaults
+- [x] All office options from the README, with settings order: options > env vars > `settings.toml` > defaults
   - CLI parsing and validated settings are implemented; animation/style/pet/team rendering integration remains with the visual milestones. Project ville settings override user TOML; env and options override both.
+  - Lead 2026-10-17 (#25): now all wired up: `--fps` (M3), `--style` / `--pet` (M4), `--team` (M5), `--still` (added in #25). `--theme` maps to Textual themes until M13; `--style blocks` falls back to ASCII until M12.
 - [x] `status` (`--json`, `--watch`, `--agent`), `doctor` (checks `gh` login and board labels), `config` (`path`, `show`, `get`, `set`)
 - [x] `task new`, `task take`, `task move`, `task list`, calling `gh` underneath
 - [x] `new [NAME]`: create-a-ville wizard (name, shape, agents, pets, board, check interval, emoji test) → `.tomville/ville.toml`; creates board labels, adds the `tmv send` and `tmv task` rules to `CLAUDE.md`/`AGENTS.md`, installs the Claude hook
@@ -128,6 +137,10 @@ Checked with fake events (`tests/test_world.py`, `tests/test_app.py`) and live i
 - [x] Exit codes as in the README; `--no-color` / `NO_COLOR`
 
 **Check:** `tmv status --json` and `tmv doctor` give correct output; `tmv task take 12` moves card #12 to Doing on the next check; `--help` lists every option.
+
+Lead Check 2026-10-17 (#25): `tmv status --json` → 3 agents, 13 cards, no errors; `tmv doctor` → 0 problems, 0 warnings; `--help` lists every option and command; `tmv task take 20` (by codex1) moved #20 to Doing on the board. `tmv new --yes` in a throwaway repo saved the ville, wrote the rules and added the hook (#21).
+
+Done 2026-10-17 · PR #16, PR #21
 
 ## M7 · Interaction and install
 
@@ -224,6 +237,7 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-17: M0–M6 done. M7 (interaction and install) is next in Part 1.
 - 2026-10-17: No work on `main` for anyone; every change is a PR linked to an issue, with a detailed issue comment; the lead checks conflicts and squash-merges (#7).
 - 2026-10-17: Issues #1–#6 opened, one per milestone M1–M6, as the board for this build. `AGENTS.md` and `CLAUDE.md` added with the team rules.
 - 2026-10-17: First run is "create a new ville" (`tmv new`, saved in `.tomville/ville.toml`). Lead + workers layout designed: boss on top with the board, named worker desks facing it, handover with bubbles (M1, M3, M6).

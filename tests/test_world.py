@@ -244,3 +244,20 @@ def test_blocked_and_unknown_pets_start_at_their_desk():
     w = make(agent("codex1", Status.UNKNOWN), agent("codex2", Status.BLOCKED))
     assert w.pets["codex1"].cell == seat(w, "codex1")
     assert w.pets["codex2"].cell == seat(w, "codex2")
+
+
+def test_still_mode_jumps_instead_of_walking():
+    world = World(lead="claude", rng=random.Random(1), still=True)
+    world.resize(128, 30)
+    world.load([agent("claude"), agent("codex1")], [])
+    world.apply(AgentStatusChanged("codex1", Status.IDLE, Status.WORKING))
+    world.tick(0.1)  # one frame is enough: no walking
+    assert world.pets["codex1"].cell == world.office.seats["codex1"]
+
+
+def test_still_comes_from_settings():
+    from tomville.core.settings import OfficeSettings
+    from tomville.tui.app import make_world
+
+    assert make_world(OfficeSettings(still=True)).still
+    assert not make_world(OfficeSettings()).still
