@@ -260,3 +260,66 @@ def test_rebased_office_settings_and_demo_snapshot(tmp_path, monkeypatch):
             assert not any(p.script or p.bubbles for p in app.world.pets.values())
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('demo,stdin_tty,stdout_tty', [(True, True, True), (False, False, True), (False, True, False)])
+def test_startup_skips_wizard_without_importing_it(tmp_path, monkeypatch, demo, stdin_tty, stdout_tty):
+    import builtins
+    from tomville import cli
+    from tomville.tui import app
+
+    original_import = builtins.__import__
+
+    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == 'tomville.core.ville' or (name == 'tomville.core' and 'ville' in fromlist):
+            raise AssertionError('wizard imported during noninteractive/demo startup')
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, '__import__', guarded_import)
+    monkeypatch.setattr('sys.stdin.isatty', lambda: stdin_tty)
+    monkeypatch.setattr('sys.stdout.isatty', lambda: stdout_tty)
+    settings = OfficeSettings(demo=demo)
+    assert cli.offer_new(None, tmp_path, settings) is False
+
+    def unexpected_offer(*args):
+        raise AssertionError('offer_new called during noninteractive/demo startup')
+
+    monkeypatch.setattr(cli, 'offer_new', unexpected_offer)
+    started = []
+
+    class FakeApp:
+        def __init__(self, **kwargs):
+            started.append(kwargs)
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr(app, 'TomvilleApp', FakeApp)
+    argv = ['-C', str(tmp_path)] + (['--demo'] if demo else [])
+    assert main(argv) == 0
+    assert started[0]['settings'].demo is demo
+    assert not (tmp_path / '.tomville').exists()
+
+
+@pytest.mark.parametrize('missing', ['textual', 'tomli_w'])
+def test_doctor_reports_missing_installed_dependency(tmp_path, monkeypatch, capsys, missing):
+    from tomville import cli
+
+    importer = cli.importlib.import_module
+
+    def import_module(name, *args, **kwargs):
+        if name == missing:
+            raise ModuleNotFoundError(f"No module named '{name}'")
+        return importer(name, *args, **kwargs)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', import_module)
+    monkeypatch.setattr(doctor, 'diagnose', lambda *args: {'checks': [], 'problems': 0, 'warnings': 0})
+    assert main(['doctor', '--json', '-C', str(tmp_path)]) == 1
+    data = json.loads(capsys.readouterr().out)
+    check = next(c for c in data['checks'] if c['name'] == f'Dependency {missing}')
+    assert not check['ok'] and check['required']
+    assert check['fix'] == 'uv tool install --editable . --reinstall'
+    assert data['problems'] == 1
+    assert main(['doctor', '-C', str(tmp_path)]) == 1
+    text = capsys.readouterr().out
+    assert f'FAIL Dependency {missing}' in text and check['fix'] in text
