@@ -8,8 +8,18 @@ the lounge, review zone and door run along the bottom, as in the lead office.
 
 from __future__ import annotations
 
-from tomville.core.shapes.base import Canvas, OfficeMap, Rect
-from tomville.core.shapes.lead import MIN_HEIGHT, MIN_WIDTH, _too_small
+from tomville.core.shapes.base import (
+    Canvas,
+    OfficeMap,
+    Rect,
+    best_fit,
+    bottom_zones,
+    is_compact,
+    tag,
+    tag_widths,
+    too_small,
+    too_small_map,
+)
 
 STATION_W, STATION_H = 10, 3
 BELT = "═"
@@ -27,9 +37,14 @@ class PipelineShape:
         return self.stages or list(workers)
 
     def layout(self, width: int, height: int, lead: str | None, workers: list[str]) -> OfficeMap:
-        if width < MIN_WIDTH or height < MIN_HEIGHT:
-            return _too_small(width, height)
+        if too_small(width, height):
+            return too_small_map(width, height)
+        if is_compact(width, height):
+            return self._compact(width, height, workers)
+        stages = self.order(workers)
+        return best_fit(self._full(width, height, workers), lambda: self._compact(width, height, workers), stages)
 
+    def _full(self, width: int, height: int, workers: list[str]) -> OfficeMap:
         c = Canvas(width, height)
         c.walls()
         zones: dict[str, Rect] = {}
@@ -43,15 +58,8 @@ class PipelineShape:
         zones["board"] = board
         zones["board_cards"] = Rect(board.x + 1, board.y + 2, board.w - 2, board.h - 3)
 
+        bottom_zones(c, zones, compact=False)
         bottom = height - 2
-        zones["lounge"] = Rect(1, bottom - 2, 18, 3)
-        c.text(3, bottom, "LOUNGE")
-        zones["review"] = Rect(width // 2 - 6, bottom - 2, 12, 3)
-        c.text(width // 2 - 3, bottom, "REVIEW")
-        zones["door"] = Rect(width - 1, bottom - 1, 1, 2)
-        c.put(width - 1, bottom - 1, " ")
-        c.put(width - 1, bottom, " ")
-        c.text(width - 7, bottom, "DOOR")
 
         # Stations and the DONE box share one row; the belt runs under their seats.
         stages = self.order(workers)
@@ -73,11 +81,48 @@ class PipelineShape:
             zones[f"belt:{name}"] = Rect(box.x, belt_y, box.w, 1)
             if name != "_done":
                 seats[name] = (box.cx, box.y + box.h)
+        self._belt(c, zones, desks, boxes, x0, row_w, belt_y)
+        return OfficeMap(width, height, c.rows(), zones, desks, seats)
+
+    def _compact(self, width: int, height: int, workers: list[str]) -> OfficeMap:
+        """Small screens: name tags for stations, no board.
+
+        Neighbouring stations sit on alternate seat rows so their names don't run
+        into each other; the belt runs under both.
+        """
+        c = Canvas(width, height)
+        c.walls()
+        zones: dict[str, Rect] = {}
+        desks: dict[str, Rect] = {}
+        seats: dict[str, tuple[int, int]] = {}
+        bottom_zones(c, zones, compact=True)
+
+        stages = self.order(workers)
+        room, min_w, gap = width - 2, 5, 1
+        fit = max(1, (room + gap) // (min_w + gap))  # boxes that fit in one row, DONE included
+        boxes = stages[: fit - 1] + ["_done"]
+        tw = tag_widths([("DONE" if n == "_done" else n) for n in boxes], room, gap)
+        gap = max(1, min(6, (room - len(boxes) * tw) // (len(boxes) + 1)))
+        row_w = len(boxes) * tw + (len(boxes) - 1) * gap
+        free = zones["lounge"].y - 2  # last free row: keep a walkway over the bottom zones
+        y = 1 + max(0, (free - 4) // 2)
+        belt_y = y + 3
+        x0 = (width - row_w) // 2
+        for i, name in enumerate(boxes):
+            box = Rect(x0 + i * (tw + gap), y, tw, 1)
+            tag(c, box, "DONE" if name == "_done" else name)
+            desks[name] = box
+            zones[f"belt:{name}"] = Rect(box.x, belt_y, box.w, 1)
+            if name != "_done":
+                seats[name] = (box.cx, box.y + 1 + i % 2)
+        self._belt(c, zones, desks, boxes, x0, row_w, belt_y)
+        return OfficeMap(width, height, c.rows(), zones, desks, seats)
+
+    @staticmethod
+    def _belt(c: Canvas, zones, desks, boxes, x0: int, row_w: int, belt_y: int) -> None:
         zones["done"] = desks["_done"]
         zones["belt"] = Rect(x0, belt_y, row_w, 1)
         for x in range(x0, x0 + row_w):
             c.put(x, belt_y, BELT)
         for left, right in zip(boxes, boxes[1:]):
             c.put((desks[left].x + desks[left].w + desks[right].x) // 2, belt_y, ARROW)
-
-        return OfficeMap(width, height, c.rows(), zones, desks, seats)

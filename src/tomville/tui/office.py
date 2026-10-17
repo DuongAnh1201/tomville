@@ -83,7 +83,7 @@ class OfficeView(Widget):
             moving = a.moving or a.status is Status.WORKING
             frame = frames[int(self.world.time * ANIM_HZ) % len(frames)] if moving else frames[0]
             put(a.x, a.y, frame, style)
-            put(a.x + 2, a.y, a.label, "dim" if a.status is not Status.BLOCKED else style)
+            put(a.label_x, a.y if a.label_y is None else a.label_y, a.label, "dim" if a.status is not Status.BLOCKED else style)
         for a in apps:
             rect = self.world.bubble_rect(a.name)
             if rect is not None:
