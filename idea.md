@@ -80,7 +80,7 @@ From inside herdr, with only this Claude session running:
 {"agent":"claude","agent_status":"working","pane_id":"w1:p1","cwd":"/root", …}
 ```
 
-So Tomville uses `name` when present, else the kind (`Agent.from_herdr` does this). Two unnamed agents of the same kind would clash, so every worker should be started with a name. Right after start, an agent can show `blocked` for a moment before it settles to `idle`.
+So Tomville uses `name` when present, else the kind (`Agent.from_herdr` does this). **Seen on 2026-10-17:** after the herdr server restarted, herdr no longer recognised Codex as an agent: an existing codex1 and a newly started Codex both stayed `unknown` with no `agent` field, so `herdr agent prompt` refused them. Claude agents were recognised normally. Tomville copes (it falls back to `agent_session.agent` for the kind and shows `?`). Two unnamed agents of the same kind would clash, so every worker should be started with a name. Right after start, an agent can show `blocked` for a moment before it settles to `idle`.
 
 ### Live event stream
 

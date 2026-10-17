@@ -67,9 +67,10 @@ def make_world(settings, lead: str | None = None) -> World:
     from tomville.core.shapes import PipelineShape
 
     configured = lead if lead is not None else getattr(settings, "lead", None)
+    still = bool(getattr(settings, "still", False))
     if getattr(settings, "team", "lead") == "pipeline":
-        return World(shape=PipelineShape(getattr(settings, "stages", ())), lead=configured)
-    return World(lead=configured or "claude")
+        return World(shape=PipelineShape(getattr(settings, "stages", ())), lead=configured, still=still)
+    return World(lead=configured or "claude", still=still)
 
 
 class TomvilleApp(App):

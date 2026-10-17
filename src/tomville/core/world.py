@@ -126,9 +126,11 @@ class World:
         shape: TeamShape | None = None,
         lead: str | None = "claude",
         rng: random.Random | None = None,
+        still: bool = False,
     ) -> None:
         self.shape = shape or LeadShape()
         self.lead = lead
+        self.still = still  # --still: no walking; pets and cards jump to where they go
         self.rng = rng or random.Random()
         play = PLAYS.get(self.shape.name)
         self.play: Play = play() if play else NullPlay()
@@ -320,6 +322,9 @@ class World:
     def tick(self, dt: float) -> None:
         self.time += dt
         for parcel in self.parcels.values():
+            if self.still and parcel.path:
+                parcel.x, parcel.y = parcel.path[-1]
+                parcel.path.clear()
             budget = BELT_SPEED * dt
             while parcel.path and budget > 0:
                 tx, ty = parcel.path[0]
@@ -349,6 +354,10 @@ class World:
                 pet.bubbles.pop(0)
 
     def _move(self, pet: Pet, dt: float) -> None:
+        if self.still and pet.path:
+            pet.x, pet.y = pet.path[-1]
+            pet.path.clear()
+            return
         budget = pet.speed * dt
         while budget > 0 and pet.path:
             tx, ty = pet.path[0]
