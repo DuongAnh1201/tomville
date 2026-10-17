@@ -268,7 +268,7 @@ class World:
             if blink_on:
                 mark = "❗"
             if int(self.time * BLINK_HZ) % 2 == 0:
-                y = max(1, y - 1)  # the jump
+                y = self._jump_to(x, y)
         elif pet.status is Status.UNKNOWN:
             mark = "?"
         elif pet.sleeping:
@@ -277,6 +277,16 @@ class World:
             mark = self.task_of(pet.name) or ""
         bubble = pet.bubbles[0][0] if pet.bubbles else None
         return Appearance(pet.name, pet.kind, pet.status, x, y, mark, bubble, bool(pet.path))
+
+    def _jump_to(self, x: int, y: int) -> int:
+        """Where a blocked pet at (x, y) is drawn while it jumps: up, else down, else here.
+
+        The sprite is 2 cells wide and must not land on a wall or a desk.
+        """
+        for ny in (y - 1, y + 1):
+            if all(self._inside((nx, ny)) and (nx, ny) not in self._blocked for nx in (x, x + 1)):
+                return ny
+        return y
 
     def bubble_rect(self, name: str) -> Rect | None:
         """Where `name`'s bubble goes: inside the office, over no pet and no name."""
