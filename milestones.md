@@ -119,12 +119,13 @@ Checked with fake events (`tests/test_world.py`, `tests/test_app.py`) and live i
 ## M6 · CLI essentials
 
 - [ ] All office options from the README, with settings order: options > env vars > `settings.toml` > defaults
-- [ ] `status` (`--json`, `--watch`, `--agent`), `doctor` (checks `gh` login and board labels), `config` (`path`, `show`, `get`, `set`)
-- [ ] `task new`, `task take`, `task move`, `task list`, calling `gh` underneath
+  - CLI parsing and validated settings are implemented; animation/style/pet/team rendering integration remains with the visual milestones. Project ville settings override user TOML; env and options override both.
+- [x] `status` (`--json`, `--watch`, `--agent`), `doctor` (checks `gh` login and board labels), `config` (`path`, `show`, `get`, `set`)
+- [x] `task new`, `task take`, `task move`, `task list`, calling `gh` underneath
 - [ ] `new [NAME]`: create-a-ville wizard (name, shape, agents, pets, board, check interval, emoji test) → `.tomville/ville.toml`; creates board labels, adds the `tmv send` and `tmv task` rules to `CLAUDE.md`/`AGENTS.md`, installs the Claude hook
 - [ ] Bare `tomville` in a project with no ville offers `tmv new`
 - [ ] `setup`: redo calibration, labels, rules or hook for an existing ville
-- [ ] Exit codes as in the README; `--no-color` / `NO_COLOR`
+- [x] Exit codes as in the README; `--no-color` / `NO_COLOR`
 
 **Check:** `tmv status --json` and `tmv doctor` give correct output; `tmv task take 12` moves card #12 to Doing on the next check; `--help` lists every option.
 
