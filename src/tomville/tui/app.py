@@ -16,6 +16,7 @@ from textual.binding import Binding
 from textual.containers import Container, Vertical
 from textual.widgets import Footer, Header, RichLog, Static
 
+from tomville.core.sprites import Sprites
 from tomville.core.world import World
 from tomville.tui.office import OfficeView
 
@@ -69,6 +70,7 @@ class TomvilleApp(App):
         Binding("g", "board_interval", "Board interval"),
         Binding("q", "quit", "Quit"),
         Binding("f", "cycle_fps", "FPS"),
+        Binding("s", "cycle_style", "Style"),
         Binding("question_mark", "help", "Help", key_display="?"),
     ]
 
@@ -80,6 +82,7 @@ class TomvilleApp(App):
         live: bool = True,
         lead: str | None = None,
         fps: int | None = None,
+        sprites: Sprites | None = None,
     ) -> None:
         super().__init__()
         self.project = (project or Path.cwd()).resolve()
@@ -89,6 +92,7 @@ class TomvilleApp(App):
         self.reader.snapshot = self.load_snapshot
         self.live = live
         self.world = World(lead=lead if lead is not None else getattr(self.settings, "lead", None) or "claude")
+        self.sprites = sprites or Sprites.from_settings(self.settings)
         self.fps = fps if fps is not None else getattr(self.settings, "fps", DEFAULT_FPS)
         self._frame_timer = None
         self._last_frame = time.monotonic()
@@ -96,7 +100,7 @@ class TomvilleApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(id="main"):
-            yield OfficeView(self.world)
+            yield OfficeView(self.world, self.sprites)
             with Vertical(id="sidebar"):
                 yield TeamPanel()
                 yield BoardPanel()
@@ -131,8 +135,17 @@ class TomvilleApp(App):
         now = time.monotonic()
         self.world.tick(min(now - self._last_frame, MAX_DT))
         self._last_frame = now
+        self._flush_notes()
         for view in self.query(OfficeView):  # none left while the app shuts down
             view.refresh()
+
+    def _flush_notes(self) -> None:
+        for note in self.sprites.take_notes():
+            for log in self.query(EventsPanel):
+                log.write(note)
+
+    def action_cycle_style(self) -> None:
+        self.notify(f"{self.sprites.cycle_style()} sprites", title="Style", timeout=2)
 
     def on_unmount(self) -> None:
         if self._frame_timer is not None:

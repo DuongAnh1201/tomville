@@ -98,10 +98,10 @@ Checked with fake events (`tests/test_world.py`, `tests/test_app.py`) and live i
 
 ## M4 · Sprites
 
-- [ ] Sprite file format (frames separated by `---`)
-- [ ] Built-in cat, dog, sheep in emoji and ASCII
-- [ ] Default pet for every herdr agent kind
-- [ ] `S` key switches style; `--style`, `--pet AGENT=PET`
+- [x] Sprite file format (frames separated by `---`)
+- [x] Built-in cat, dog, sheep in emoji and ASCII
+- [x] Default pet for every herdr agent kind
+- [x] `S` key switches style; `--style`, `--pet AGENT=PET`
 
 **Check:** `tmv --demo` shows three animated pets; `S` switches emoji ↔ ASCII without the map shifting; all tests pass.
 
