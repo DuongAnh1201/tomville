@@ -114,7 +114,7 @@ Press `S` to cycle through styles. Each pet has the same frames in each style.
 Sprites live in plain text files, one folder per pet, so you can draw your own:
 
 ```
-sprites/
+src/pixel_office/data/sprites/
   cat/
     emoji.txt     # frames separated by a line with ---
     ascii.txt
@@ -130,11 +130,17 @@ style = "emoji"          # emoji | ascii | blocks
 idle_sleep_seconds = 60
 poll_seconds = 1
 
-[pets]
-claude = "cat"
-codex1 = "dog"
-codex2 = "sheep"
+[pets.claude]
+sprite = "cat"
+
+[pets.codex1]
+sprite = "dog"
+
+[pets.codex2]
+sprite = "sheep"
 ```
+
+Colours and your own pet designs are covered in [Custom pets and colours](#custom-pets-and-colours).
 
 ## Interaction
 
@@ -145,36 +151,195 @@ codex2 = "sheep"
 | `F` | Cycle frame rate |
 | `S` | Cycle sprite style |
 | `B` | Show the board full-screen |
+| `T` | Cycle colour themes |
 | `?` | Help |
 
-v1 only watches. Approvals still happen in the agent's own pane: the blocked pet tells you where to go, and `Enter` takes you there. Sending prompts from the app comes later (milestone 5).
+v1 only watches. Approvals still happen in the agent's own pane: the blocked pet tells you where to go, and `Enter` takes you there. Sending prompts from the app comes later (see [Later](#later-not-in-the-two-days)).
+
+## Custom pets and colours
+
+You can design both the pet and its colours. How much depends on the sprite style:
+
+| Style | Shape | Colour |
+| --- | --- | --- |
+| Emoji 🐱 | Pick from the tested emoji list | Fixed by the font. Only the name label takes a colour |
+| ASCII `^^` | Any characters | One colour per pet |
+| Block pixel `▟▙` | Draw pixel by pixel | Any colour, per pixel. Best for your own designs |
+
+Termux supports 24-bit colour, so any hex colour works.
+
+### Sprite file format
+
+Each frame has two grids side by side: the shape on the left, colour letters on the right. A `[palette]` maps each letter to a hex colour. Frames are separated by `---`.
+
+`~/.config/pixel-office/sprites/fox/blocks.txt`:
+
+```
+# shape        # colours
+ ▄▀▀▄           OOOO
+ █▄▄█           OWWO
+ ▀  ▀           B  B
+---
+ ▄▀▀▄           OOOO
+ █▄▄█           OWWO
+  ▀▀             BB
+
+[palette]
+O = "#ff8800"   # orange fur
+W = "#ffffff"   # white face
+B = "#5a3a1a"   # brown feet
+```
+
+Rules:
+
+- A pet is a whole number of 2-cell tiles wide; this fox is 2 tiles (4 cells).
+- Every frame of one pet has the same size.
+- A space in the colour grid means "no colour".
+- The first frame is used when standing still; all frames play in a loop when moving or working.
+
+Your own pets go in `~/.config/pixel-office/sprites/<name>/` and override a built-in pet with the same name. Run `pixel-office pets` to preview them all.
+
+### Colours and themes
+
+In `~/.config/pixel-office/settings.toml`:
+
+```toml
+theme = "night"          # night | game-boy | green-screen
+
+[pets.claude]
+sprite = "cat"
+color  = "#f5a97f"       # the agent's colour: ASCII pet, name, board cards, events
+
+[pets.codex1]
+sprite = "fox"           # your own design
+```
+
+Three built-in themes. Press `T` in the app to cycle them.
+
+## Install and setup from the terminal
+
+One command installs it, and `pixel-office doctor` shows the whole setup in the terminal: what is ready, what is missing, and the command to fix it.
+
+### Install
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv tool install git+https://github.com/DuongAnh1201/pixel-office
+```
+
+This needs the repo to be public, or `gh` logged in with access to it. Update with `uv tool upgrade pixel-office`; remove with `uv tool uninstall pixel-office`. Settings in `~/.config/pixel-office/` stay.
+
+### Commands
+
+| Command | What it does |
+| --- | --- |
+| `pixel-office` | Start the office. On first run it does `setup` first |
+| `pixel-office setup` | Emoji calibration, then writes default settings with a pet per running agent |
+| `pixel-office doctor` | Check the whole setup and print fixes |
+| `pixel-office pets` | Preview every pet, built-in and your own |
+| `pixel-office --version` | Show the version |
+
+### Doctor
+
+```
+Pixel Office doctor · v0.1.0
+
+ Environment
+  ✔ Python 3.12.3
+  ✔ Terminal 142 × 41 cells, 24-bit colour
+  ✔ Emoji width calibrated (emoji style)
+
+ herdr
+  ✔ herdr 0.9.5 at /root/.local/bin/herdr
+  ✔ Running inside herdr (HERDR_ENV=1)
+  ✔ Claude integration installed
+  ✔ Codex integration installed
+
+ Agents
+  ✔ claude   (cat, #f5a97f)
+  ✖ codex1   not running → herdr agent start codex1 --kind codex --pane <pane>
+
+ Board
+  ✔ TASKS.md found (3 tasks)
+
+ Settings  ~/.config/pixel-office/settings.toml
+ Sprites   ~/.config/pixel-office/sprites/ (1 custom pet)
+
+ 1 problem found.
+```
+
+Required: Python, herdr, and running inside herdr. Everything else is a warning; the office still starts and shows what it can.
+
+## Tech stack
+
+Kept small so it fits in two days.
+
+| Layer | Choice | Why |
+| --- | --- | --- |
+| Language | Python 3.11+ | Already on Ubuntu; `tomllib` built in |
+| Terminal UI | [Textual](https://textual.textualize.io/) + [Rich](https://rich.readthedocs.io/) | Layouts, touch, animation timers, 24-bit colour, `cell_len` for emoji width |
+| CLI commands | `argparse` (standard library) | Five commands; no extra dependency |
+| Settings | TOML: `tomllib` to read, `tomli-w` to write | Human-editable, same format as Codex and herdr |
+| Agent status | `herdr agent list` (JSON via `subprocess`) | Uses the existing setup; no extra server |
+| Board | `TASKS.md`, re-read when its modified time changes | No file-watching library needed |
+| Packaging | `pyproject.toml` + hatchling; [uv](https://docs.astral.sh/uv/) | One command to install, update, remove |
+| Tests | pytest for the world model, sprite loader and doctor | The game logic is tested with fake events, no agents needed |
+
+Dependencies: `textual` and `tomli-w` only.
 
 ## Project layout
 
 ```
-~/pixel-office/
-  pixel_office/
-    app.py          # Textual app, layout, keys
-    poller.py       # herdr agent list + TASKS.md -> events
-    world.py        # pets, zones, targets, movement
-    sprites.py      # load frames, width check
-    render.py       # office map + sprites widget
-    settings.py
-  sprites/          # one folder per pet
-  maps/office.txt   # the floor plan, drawn as text
-  settings.toml
-  tests/            # world + poller tests with fake events
+pixel-office/
+  pyproject.toml
+  README.md
+  src/pixel_office/
+    cli.py           # argparse commands: run, setup, doctor, pets
+    app.py           # Textual app, layout, keys
+    doctor.py        # checks shared by doctor and setup
+    poller.py        # herdr agent list + TASKS.md -> events
+    world.py         # pets, zones, targets, movement
+    sprites.py       # load sprite files, palette, width check
+    settings.py      # read/write settings.toml
+    data/
+      sprites/       # built-in pets: cat, dog, sheep
+      themes/        # night, game-boy, green-screen
+      office.txt     # the floor plan, drawn as text
+  tests/
 ```
 
-Requirements: Python 3 and `textual` (`pip install textual`). It must run inside a herdr tab, so `herdr agent list` sees the session.
+User files live outside the package, so updates never overwrite them: `~/.config/pixel-office/settings.toml` and `~/.config/pixel-office/sprites/`.
 
-## Milestones
+## Two-day plan
 
-1. **Static office (day 1):** map, Team list and board from real herdr and `TASKS.md` data; pets drawn in their zones, no movement.
-2. **Movement (day 2):** frame timer, fps option, walking between zones, the status-to-behaviour table.
-3. **Sprites and width (day 3):** three styles, sprite files, width check, calibration screen.
-4. **Interaction (day 4):** select pets, `Enter` to open the pane, Events panel, idle power saving.
-5. **Later:** a prompt box that sends tasks to the lead (`herdr agent prompt claude "..."`); reading the GitHub board instead of `TASKS.md`; a web version through Textual's browser mode.
+**Day 1: a live, moving office**
+
+| Block | Build | Done when |
+| --- | --- | --- |
+| Morning | Project skeleton, `pyproject.toml`, office map, Textual layout (office + Team + Board + Events) | `pixel-office` opens the empty office |
+| Midday | Poller: `herdr agent list` + `TASKS.md` into events | Team list and board show real data |
+| Afternoon | World model: zones, status-to-behaviour table, cell-by-cell movement, fps option (`F`) | Pets walk to their desk when you start Claude or Codex |
+| Evening | Emoji and ASCII sprites, built-in cat, dog and sheep | Style switch (`S`) works; tests for the world model pass |
+
+**Day 2: your own pets, setup and install**
+
+| Block | Build | Done when |
+| --- | --- | --- |
+| Morning | Block-pixel sprite format with palettes; custom pets folder; `pixel-office pets` preview | Your own fox walks around in its colours |
+| Midday | Themes (`T`), agent colours, emoji width check and calibration screen | Map stays aligned on the 11-inch screen |
+| Afternoon | `doctor` and `setup` commands | `doctor` prints the full checklist |
+| Evening | Tap to select, `Enter` to open the pane, idle power saving; install test with `uv tool install` from GitHub | Fresh install works end to end |
+
+If day 1 runs late, drop block-pixel sprites from day 2 first: emoji and ASCII are enough to use the app.
+
+## Later (not in the two days)
+
+- Pet editor: paint pets by tapping cells.
+- Prompt box that sends tasks to the lead (`herdr agent prompt claude "..."`).
+- GitHub Projects board instead of `TASKS.md`.
+- Full setup wizard with live previews; more themes.
+- PyPI release (`uv tool install pixel-office`) and GitHub Actions CI.
+- Web version through Textual's browser mode.
 
 Each milestone is usable on its own. Stop at any point.
 
