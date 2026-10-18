@@ -197,7 +197,10 @@ def new_command(args, project):
     print(f'Saved {ville.write_ville(project, answers.data())}')
     settings = load_settings(project, config=args.config)
     failed = ville.run_steps(project, settings, ville.STEPS, args.claude_settings or ville.claude_settings_path())
-    print('Next: start the agents in herdr panes (`tmv doctor` lists what is missing), then run `tmv` in its own tab.')
+    if answers.agent_specs and not args.yes and confirm('Start the team now?'):
+        print('Run `tmv up` to start the team (it lands with the team builder).')
+    else:
+        print('Next: run `tmv up` to start the team (`tmv doctor` lists what is missing), then `tmv` in its own tab.')
     return int(failed > 0)
 
 

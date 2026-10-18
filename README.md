@@ -367,6 +367,53 @@ sprite = "fox"           # your own design
 
 Three built-in themes. Press `T` in the app to cycle them.
 
+## Start your team
+
+You answer a few questions once; Tomville builds the team in herdr. Nobody types `herdr` commands. Lead + workers shape only for now.
+
+```bash
+tmv new      # the questions, saved in .tomville/ville.toml
+tmv up       # builds the team (no ville yet? it asks the tmv new questions first)
+tmv down     # stops what tmv up started
+```
+
+**Questions.** For each agent: its name, its **kind** (`claude`, `codex`, `gemini`, … any kind `herdr agent start --kind` knows), its **model** (free text passed as `--model`; empty means the CLI's own default, so the list never goes stale) and its **place**:
+
+| Place | What Tomville makes |
+| --- | --- |
+| `here` | The pane you are in (the lead only) |
+| `worktree` | A git worktree on its own branch, in a new tab (default for workers) |
+| `tab` | A new tab in the project folder |
+| `pane` | A split of the current pane |
+
+Then: "Add a secretary (Claude Haiku) to file issues and email you when work is finished?" and the email address it may write to (default: `git config user.email`). The answers become `[agents.NAME]` tables:
+
+```toml
+[agents.claude]
+kind = "claude"
+model = "claude-opus-5-5"
+place = "here"
+
+[agents.codex1]
+kind = "codex"
+place = "worktree"
+
+[agents.secretary]
+kind = "claude"
+model = "claude-haiku-5-5"
+place = "tab"
+role = "secretary"
+email = "tom@example.com"
+```
+
+`tmv new` ends with "Start the team now?".
+
+**Who is the lead.** Run `tmv up` inside an agent's pane and that agent is the lead; no second lead is started. Run it in a plain shell and Tomville starts the lead too, in a new tab.
+
+**If herdr can't detect an agent**, Tomville names the pane, the running process and the last lines, with the known fix: a script launcher in front of the real binary (`tmv setup launcher codex`), a startup prompt such as folder trust (answer it yourself), a CLI that is not installed, or a shell that remembers an old path. `tmv doctor` runs the same checks without starting anything.
+
+`tmv down` quits the agents `tmv up` started and closes their panes; worktrees are kept, and so is the lead's own pane.
+
 ## Install and setup from the terminal
 
 One command installs it, and `tomville doctor` shows the whole setup in the terminal: what is ready, what is missing, and the command to fix it.
@@ -443,7 +490,10 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `send AGENT TEXT` | Prompt another agent and log who sent it (see [Who talks to whom](#who-talks-to-whom)). For agents to use instead of `herdr agent prompt` | `--wait`, `--timeout MS` (passed to herdr) |
 | `status` | Print the team and board once, then exit. Like `claude -p`: no app opens | `--json`, `--watch [SEC]` (reprint every N s), `--agent NAME` |
 | `doctor` | Check the setup and print fixes | `--json` |
-| `new [NAME]` | Create a new ville for this project: name, team shape, agents, pets, board, emoji check. Saved in `.tomville/ville.toml`. Bare `tomville` offers this when the project has no ville yet | `--yes` (accept defaults), `--claude-settings FILE` (hook file, default `~/.claude/settings.json`) |
+| `new [NAME]` | Create a new ville for this project: name, team shape, agents (kind, model, place), secretary, pets, board, emoji check. Saved in `.tomville/ville.toml`. Bare `tomville` offers this when the project has no ville yet | `--yes` (accept defaults), `--claude-settings FILE` (hook file, default `~/.claude/settings.json`) |
+| `up` | Build the team in herdr from the ville (see [Start your team](#start-your-team)); with no ville it asks the `new` questions first. Safe to run again | |
+| `down [NAME]` | Stop what `up` started; worktrees and the lead's own pane stay | |
+| `setup launcher KIND` | Write a `~/.local/bin` wrapper that runs the real binary, so herdr can detect it (asks first) | |
 | `setup` | Redo parts of setup for this ville: emoji calibration, labels, agent rules, hook | `--yes` (no questions; skips the emoji test unless `--style` is given), `--style`, `--theme`, `--claude-settings FILE` |
 | `pets list` | Show every pet, animated | `--style` |
 | `pets show NAME` | Show one pet's frames and palette | `--style`, `--fps` |

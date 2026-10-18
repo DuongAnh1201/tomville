@@ -18,7 +18,7 @@ def isolated(tmp_path, monkeypatch):
 
     def no_network(args, project):  # never gh or git remote from a test
         calls.append(args)
-        if args[:2] == ['git', 'remote']:
+        if args[:2] in (['git', 'remote'], ['git', 'config']):
             raise OSError('no remote')
         raise AssertionError(f'unexpected command: {args}')
 
@@ -40,7 +40,7 @@ def scripted(*answers):
 
 
 def test_questions_for_lead_and_workers(tmp_path):
-    ask = scripted('Tom ville', 'lead', 'boss', 'w1, w2', 'dog', 'sheep', 'cat', 'tasks-md', '30', 'no')
+    ask = scripted('Tom ville', 'lead', 'boss', 'w1, w2', None, None, None, None, None, None, None, None, 'no', 'dog', 'sheep', 'cat', 'tasks-md', '30', 'no')
     a = ville.ask_answers(tmp_path, None, ask)
     assert (a.name, a.shape, a.lead, a.workers) == ('Tom ville', 'lead', 'boss', ['w1', 'w2'])
     assert a.pets == {'boss': 'dog', 'w1': 'sheep', 'w2': 'cat'}
@@ -48,6 +48,38 @@ def test_questions_for_lead_and_workers(tmp_path):
     settings = settings_from_data(a.data())
     assert settings.name == 'Tom ville' and settings.lead == 'boss' and settings.pets['w1'] == {'sprite': 'sheep'}
     assert settings.style == 'ascii' and settings.source == 'tasks-md'
+
+
+def wizard(tmp_path, *agent_answers, tail=('dog', 'sheep', 'cat', 'tasks-md', '30', 'yes')):
+    ask = scripted('V', 'lead', 'boss', 'w1,w2', *agent_answers, *tail)
+    return ville.ask_answers(tmp_path, None, ask)
+
+
+def test_agent_defaults_with_a_secretary(tmp_path, monkeypatch):
+    monkeypatch.setattr(ville, 'run_command', lambda args, project: 'tom@example.com\n')
+    a = wizard(tmp_path, *[None] * 8, None, None, tail=(None,) * 4 + ('tasks-md', '30', 'yes'))
+    assert list(a.agent_specs) == ['boss', 'w1', 'w2', 'secretary']
+    assert a.agent_specs['boss'] == {'kind': 'claude', 'model': '', 'place': 'here'}
+    assert a.agent_specs['w1'] == {'kind': 'codex', 'model': '', 'place': 'worktree'}
+    assert a.agent_specs['secretary'] == {'kind': 'claude', 'model': 'claude-haiku-5-5', 'place': 'tab', 'role': 'secretary', 'email': 'tom@example.com'}
+    settings = settings_from_data(a.data())
+    assert list(settings.agents) == ['boss', 'w1', 'w2', 'secretary'] and settings.agents['secretary'].role == 'secretary'
+    assert set(settings.pets) == {'boss', 'w1', 'w2', 'secretary'}
+
+
+def test_custom_model_each_place_and_no_secretary(tmp_path):
+    a = wizard(tmp_path, 'claude', 'claude-opus-5-5', 'gemini', 'gemini-x', 'tab', 'codex', '', 'pane', 'no', tail=(None,) * 3 + ('tasks-md', '30', 'yes'))
+    assert a.agent_specs == {
+        'boss': {'kind': 'claude', 'model': 'claude-opus-5-5', 'place': 'here'},
+        'w1': {'kind': 'gemini', 'model': 'gemini-x', 'place': 'tab'},
+        'w2': {'kind': 'codex', 'model': '', 'place': 'pane'},
+    }
+    assert a.secretary == '' and 'secretary' not in settings_from_data(a.data()).agents
+
+
+def test_bad_place_and_kind_are_asked_again(tmp_path):
+    a = wizard(tmp_path, None, None, 'Bad Kind!', 'codex', '', 'moon', 'tab', None, None, None, 'no', tail=(None,) * 3 + ('tasks-md', '30', 'yes'))
+    assert a.agent_specs['w1'] == {'kind': 'codex', 'model': '', 'place': 'tab'}
 
 
 def test_questions_for_a_pipeline_and_bad_answers_are_asked_again(tmp_path):
@@ -155,7 +187,8 @@ def test_new_yes_makes_a_working_ville(tmp_path, capsys, isolated):
     out = capsys.readouterr().out
     settings = load_settings(tmp_path)
     assert (settings.name, settings.source, settings.lead, settings.style) == ('Tom ville', 'tasks-md', 'claude', 'emoji')
-    assert set(settings.pets) == {'claude', 'codex1', 'codex2'}
+    assert set(settings.pets) == {'claude', 'codex1', 'codex2', 'secretary'}
+    assert list(settings.agents) == ['claude', 'codex1', 'codex2', 'secretary'] and settings.agents['claude'].place == 'here'
     assert 'labels: not needed' in out and 'rules: written to AGENTS.md' in out and 'hook: added' in out
     assert (tmp_path / 'AGENTS.md').exists()
     hook = json.loads((tmp_path / 'claude' / 'settings.json').read_text())
@@ -166,7 +199,7 @@ def test_new_yes_makes_a_working_ville(tmp_path, capsys, isolated):
 
 
 def test_new_asks_the_questions(tmp_path, monkeypatch):
-    answers = iter(['Mine', 'lead', 'claude', 'codex1', 'cat', 'dog', 'tasks-md', '60', 'yes'])
+    answers = iter(['Mine', 'lead', 'claude', 'codex1', '', '', '', '', 'worktree', 'no', 'cat', 'dog', 'tasks-md', '60', 'yes', 'no'])
     monkeypatch.setattr('builtins.input', lambda text: next(answers))
     assert main(['new', '-C', str(tmp_path), '--claude-settings', str(tmp_path / 'c.json')]) == 0
     assert load_settings(tmp_path).name == 'Mine' and (tmp_path / 'c.json').exists()
@@ -227,7 +260,7 @@ def test_bare_tomville_offers_new_in_a_project_without_a_ville(tmp_path, monkeyp
     monkeypatch.setattr('tomville.tui.app.TomvilleApp', FakeApp)
     monkeypatch.setattr('sys.stdin.isatty', lambda: True)
     monkeypatch.setattr('sys.stdout.isatty', lambda: True)
-    answers = iter(['yes', 'Offered', 'lead', 'claude', 'codex1', 'cat', 'dog', 'tasks-md', '60', 'yes'])
+    answers = iter(['yes', 'Offered', 'lead', 'claude', 'codex1', '', '', '', '', 'worktree', 'no', 'cat', 'dog', 'tasks-md', '60', 'yes', 'no'])
     monkeypatch.setattr('builtins.input', lambda text: next(answers))
     assert main(['-C', str(tmp_path)]) == 0
     assert ville.has_ville(tmp_path) and started[0].name == 'Offered'
