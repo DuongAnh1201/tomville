@@ -199,6 +199,49 @@ The build is split in two (details in [milestones.md](milestones.md)):
 
 Part 1 builds the team shape as a plug-in, so Part 2 shapes don't change the core.
 
+## Auto team setup
+
+Decided 2026-10-17 with Tom (M7). Lead shape only for now.
+
+**Two ways in.** `tmv up` in a project with no `.tomville/ville.toml` asks the `tmv new` questions first; with a ville it builds the team with no questions. `tmv new` asks again (old file kept as `ville.toml.bak`) and ends with "Start the team now?". `tmv down` stops the team.
+
+**Questions per agent:** name, kind (any CLI `herdr agent start --kind` knows), model (free text passed as `--model`; empty = the CLI's default, so the list never goes stale), place (`worktree` by default, `tab`, `pane`; the lead `here`). Plus: "Add a secretary (Claude Haiku) to file issues and email you when work is finished?" and the email address.
+
+```toml
+[agents.claude]
+kind = "claude"
+model = "claude-opus-5-5"
+place = "here"
+
+[agents.codex1]
+kind = "codex"
+place = "worktree"      # branch defaults to the name
+
+[agents.secretary]
+kind = "claude"
+model = "claude-haiku-5-5"
+place = "tab"
+role = "secretary"
+email = "tom@example.com"
+```
+
+**Who is the lead.** `tmv up` run inside an agent's pane: that agent is the lead, no second lead is started. Run in a plain shell: Tomville starts the lead too, in a new tab.
+
+**What `tmv up` does per agent:** skip it if the name is in `herdr agent list` (so it is safe after a herdr restart); make the place (`herdr worktree open`, or `create --branch` when there is none; `herdr tab create`; `herdr pane split`); wait for a shell prompt; `herdr agent start NAME --kind K --pane P --timeout <start_timeout> -- --model M`, one agent at a time to spare the tablet. Then the first prompt, sent with `tmv send` so it is logged (lead: who the workers and secretary are; worker: read AGENTS.md, work in your worktree, wait for the nudge; secretary: read its AGENTS.md part, email only the set address). Last, an `office` tab running `tmv`. A failure prints one line and goes on; a summary table at the end.
+
+**Agents herdr can't detect.** herdr finds an agent by the pane's foreground process. When `agent start` times out or the name isn't in `herdr agent list` afterwards, Tomville says so with the facts (`herdr pane process-info`, last lines from `herdr pane read`) and a fix when it knows one:
+
+| Cause | Seen as | Fix |
+| --- | --- | --- |
+| Script launcher in front of the real binary (npm Codex: `node /usr/bin/codex`, process name `MainThread`) | the pane runs `node`, a child runs the CLI | `tmv setup launcher codex`: a `~/.local/bin` wrapper that `exec`s the real binary (asks first: it is outside the project) |
+| Startup prompt (folder trust, login) | herdr reports `blocked` during startup | Tomville does not answer it; it names the pane and the question |
+| CLI not installed | shell says `command not found` | install hint |
+| Shell remembers an old path | `hash` points at the old launcher | start in a fresh pane (`tmv up` always does) |
+
+Anything else: the facts plus `herdr agent explain`. `tmv doctor` runs the same checks without starting anything.
+
+**`tmv down [NAME]`** quits the agents `tmv up` started (recorded in `.tomville/team.json`, git-ignored), then closes their panes or tabs. Worktrees are kept, they hold work; the lead's own pane is never closed.
+
 ## Later updates
 
 Ideas saved for after the current plan. Not in any milestone yet.

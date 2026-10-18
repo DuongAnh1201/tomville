@@ -148,7 +148,18 @@ Done 2026-10-17 · PR #16, PR #21
 - [ ] `?` help screen; `B` full-screen board
 - [ ] `uv tool install git+https://github.com/DuongAnh1201/tomville` works on a fresh setup
 
-**Check:** fresh install → `tmv new` → `tmv` shows the real team in both shapes, end to end.
+**Auto team setup (lead shape).** The user answers questions once; Tomville builds the team, nobody types `herdr` commands. Plan: [idea.md](idea.md#auto-team-setup).
+
+- [x] `[agents.NAME]` table in the ville (`kind`, `model`, `place`, `branch`, `role`, `email`) and `start_timeout`, read by `settings.py` (lead)
+- [ ] `tmv new` asks per agent: name, kind, model (free text, empty = CLI default), place (`worktree` default, `tab`, `pane`; the lead `here`); offers a secretary (Claude Haiku) and its email; writes `[agents.*]`; ends with "Start the team now?"
+- [ ] `tmv up`: no ville → runs the `tmv new` questions first; with a ville → builds the team with no questions. Per agent: skip if running, make its place, wait for the shell, `herdr agent start … -- --model …`, one at a time; then the first prompt with `tmv send`; then an `office` tab running `tmv`. Safe to run again
+- [ ] Who is the lead: `tmv up` inside an agent's pane → that agent; in a plain shell → Tomville starts the lead in a new tab. Written clearly in the README
+- [ ] Any agent that herdr can't detect is announced: pane, running process, last lines, known fix (script launcher, CLI missing, startup prompt such as folder trust, remembered path) or `herdr agent explain`. `tmv doctor` runs the same checks
+- [ ] `tmv setup launcher KIND`: wrapper in `~/.local/bin` that runs the real binary (asks first)
+- [ ] `tmv down [NAME]`: stops what `tmv up` started (recorded in `.tomville/team.json`), keeps worktrees and the lead's own pane
+- [ ] README "Start your team" section; tests with recorded herdr JSON, no herdr
+
+**Check:** fresh install → `tmv new` → `tmv` shows the real team in both shapes, end to end. Auto setup: in a fresh herdr session with no ville, `tmv up` and answers only → every agent in `tmv status`, workers in their own worktrees, office tab open; `tmv up` again starts nothing; npm Codex without the launcher → `tmv up` names the pane, process and fix; `tmv down` → its panes gone, worktrees kept.
 
 **Part 1 done:** ______
 
@@ -237,6 +248,7 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-17: Auto team setup (`tmv up`, `tmv down`, agent kinds and models, secretary, detection messages) added to M7, since M7's Check already asks for `tmv new` → real team end to end. Lead shape only; pipeline later.
 - 2026-10-17: M0–M6 done. M7 (interaction and install) is next in Part 1.
 - 2026-10-17: No work on `main` for anyone; every change is a PR linked to an issue, with a detailed issue comment; the lead checks conflicts and squash-merges (#7).
 - 2026-10-17: Issues #1–#6 opened, one per milestone M1–M6, as the board for this build. `AGENTS.md` and `CLAUDE.md` added with the team rules.
