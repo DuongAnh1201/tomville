@@ -257,6 +257,7 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-18: Release 0.1.0 to PyPI (`uv tool install tomville`): the office, `tmv new` / `up` / `down`, status, doctor, task, setup. Tested on Ubuntu and macOS in CI; live use so far on Ubuntu in Termux PRoot.
 - 2026-10-17: PyPI packaging pulled forward from M15 at Tom's request: MIT licence, package page `docs/pypi.md`, metadata, release workflow. First release 0.1.0 waits for M7 auto setup (#39).
 - 2026-10-17: Auto team setup (`tmv up`, `tmv down`, agent kinds and models, secretary, detection messages) added to M7, since M7's Check already asks for `tmv new` → real team end to end. Lead shape only; pipeline later.
 - 2026-10-17: M0–M6 done. M7 (interaction and install) is next in Part 1.
