@@ -406,13 +406,17 @@ role = "secretary"
 email = "tom@example.com"
 ```
 
-`tmv new` ends with "Start the team now?".
+`tmv new` ends with "Start the team now?". Answering yes starts the saved team immediately; `--yes` saves the defaults without starting agents. With an existing ville, `tmv up` asks no questions and starts agents sequentially, then opens the office. Running it again reuses running agents and the office.
 
 **Who is the lead.** Run `tmv up` inside an agent's pane and that agent is the lead; no second lead is started. Run it in a plain shell and Tomville starts the lead too, in a new tab.
 
 **If herdr can't detect an agent**, Tomville names the pane, the running process and the last lines, with the known fix: a script launcher in front of the real binary (`tmv setup launcher codex`), a startup prompt such as folder trust (answer it yourself), a CLI that is not installed, or a shell that remembers an old path. `tmv doctor` runs the same checks without starting anything.
 
-`tmv down` quits the agents `tmv up` started and closes their panes; worktrees are kept, and so is the lead's own pane.
+`tmv down` quits the agents `tmv up` started and closes their panes; worktrees are kept, and so is the lead's own pane. Use `tmv down NAME` to stop just one owned agent. Ownership is saved in the git-ignored `.tomville/team.json`; pre-existing agents and office tabs are not adopted for shutdown. Pane and terminal IDs are checked before closing anything.
+
+If startup stops at a trust or login question, answer it in the named pane yourself and retry `tmv up`. The pending first message is sent once the agent is ready. A failed start whose pane is still open is retained for inspection; use `tmv down NAME` before starting a replacement. Failed agents do not prevent the rest of the team from starting.
+
+`tmv setup launcher codex` supports npm Codex's native binary and preserves its package environment. It asks before writing `~/.local/bin/codex`, keeps an existing file as `codex.bak`, and refuses to overwrite an existing backup. `--yes` accepts the write. Other launcher kinds report that automatic resolution is unsupported instead of guessing a binary or its environment. Put `~/.local/bin` first on `PATH` and use a fresh pane afterwards. Startup uses `start_timeout` seconds (default 120); herdr requires at least 3001 milliseconds, so smaller configured values use that minimum for the agent-start call.
 
 ## Install and setup from the terminal
 

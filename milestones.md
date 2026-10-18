@@ -161,6 +161,8 @@ Done 2026-10-17 · PR #16, PR #21
 
 **Check:** fresh install → `tmv new` → `tmv` shows the real team in both shapes, end to end. Auto setup: in a fresh herdr session with no ville, `tmv up` and answers only → every agent in `tmv status`, workers in their own worktrees, office tab open; `tmv up` again starts nothing; npm Codex without the launcher → `tmv up` names the pane, process and fix; `tmv down` → its panes gone, worktrees kept.
 
+Validation for #39: team lifecycle, launcher, diagnostics and wizard integration have offline tests using recorded herdr replies. Live auto-setup acceptance is pending the lead's run after Tom approves; the #39 PR gives the exact commands and expected results. Keep the auto-setup items unchecked until that Check passes.
+
 **Part 1 done:** ______
 
 ---

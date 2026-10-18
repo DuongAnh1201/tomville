@@ -77,6 +77,13 @@ def build_parser():
     common_options(setup)
     setup.add_argument('--yes', action='store_true', help='redo labels, rules and hook without asking; skip the emoji test unless --style is given')
     setup.add_argument('--claude-settings', type=Path, metavar='FILE', help='Claude Code settings.json for the hook (default: ~/.claude/settings.json)')
+    setup.add_argument('setup_part', nargs='?', choices=('launcher',))
+    setup.add_argument('kind', nargs='?')
+    up = commands.add_parser('up', help='start the team and office in herdr')
+    common_options(up)
+    down = commands.add_parser('down', help='stop panes started by tmv up; keep worktrees')
+    common_options(down)
+    down.add_argument('name', nargs='?')
     task = commands.add_parser('task', help='manage GitHub task cards')
     common_options(task)
     tasks = task.add_subparsers(dest='task_command', required=True)
@@ -187,7 +194,7 @@ def confirm(question):
     return prompt(question + ' (yes/no)', 'yes').lower().startswith('y')
 
 
-def new_command(args, project):
+def new_command(args, project, *, start=True):
     from tomville.core import ville
 
     if ville.has_ville(project):
@@ -197,9 +204,9 @@ def new_command(args, project):
     print(f'Saved {ville.write_ville(project, answers.data())}')
     settings = load_settings(project, config=args.config)
     failed = ville.run_steps(project, settings, ville.STEPS, args.claude_settings or ville.claude_settings_path())
-    if answers.agent_specs and not args.yes and confirm('Start the team now?'):
-        print('Run `tmv up` to start the team (it lands with the team builder).')
-    else:
+    if start and answers.agent_specs and not args.yes and confirm('Start the team now?'):
+        return max(int(failed > 0), team_command(args, project, settings, 'up'))
+    elif start:
         print('Next: run `tmv up` to start the team (`tmv doctor` lists what is missing), then `tmv` in its own tab.')
     return int(failed > 0)
 
@@ -207,6 +214,14 @@ def new_command(args, project):
 def setup_command(args, project, settings):
     from tomville.core import ville
 
+    if args.setup_part == 'launcher':
+        from tomville.core.team import install_launcher
+        if not args.kind:
+            raise ValueError('usage: tmv setup launcher KIND')
+        output({'result': install_launcher(args.kind, lambda question: args.yes or confirm(question))}, args)
+        return 0
+    if args.kind:
+        raise ValueError('unexpected setup argument')
     if not ville.has_ville(project):
         raise ValueError('no ville in this project; run `tmv new` first')
     updates = {key: getattr(args, key) for key in ('style', 'theme') if hasattr(args, key)}
@@ -216,6 +231,26 @@ def setup_command(args, project, settings):
         print(f'Saved {ville.update_ville(project, updates)}: ' + ', '.join(f'{k} = {v}' for k, v in updates.items()))
     steps = [step for step in ville.STEPS if args.yes or confirm(f'Redo {step}?')]
     return int(ville.run_steps(project, settings, steps, args.claude_settings or ville.claude_settings_path()) > 0)
+
+
+def team_command(args, project, settings, command):
+    from tomville.core import team, ville
+
+    if command == 'up' and not ville.has_ville(project):
+        args.name, args.yes, args.claude_settings = None, False, None
+        if new_command(args, project, start=False):
+            return 1
+        settings = load_settings(project, config=args.config)
+    rows = team.up(project, settings) if command == 'up' else team.down(project, args.name)
+    lines = ['agent · place · pane · result']
+    for row in rows:
+        lines.append(' · '.join(str(row.get(k) or '—') for k in ('agent', 'place', 'pane', 'result')))
+        if row.get('detail'):
+            lines.append(row['detail'])
+        if row.get('fix'):
+            lines.append('Fix: ' + row['fix'])
+    output(rows, args, '\n'.join(lines))
+    return int(any(row['result'] == 'FAILED' for row in rows))
 
 
 def offer_new(args, project, settings):
@@ -284,6 +319,8 @@ def main(argv=None):
             lines.append(f"{result['problems']} problems · {result['warnings']} warnings")
             output(result, args, '\n'.join(lines))
             return int(result['problems'] > 0)
+        if args.command in ('up', 'down'):
+            return team_command(args, project, settings, args.command)
         if args.command == 'task':
             return task_command(args, project, settings)
         if args.command == 'new':
