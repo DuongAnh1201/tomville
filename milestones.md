@@ -152,16 +152,22 @@ Done 2026-10-17 · PR #16, PR #21
 
 - [x] `[agents.NAME]` table in the ville (`kind`, `model`, `place`, `branch`, `role`, `email`) and `start_timeout`, read by `settings.py` (lead)
 - [x] `tmv new` asks per agent: name, kind, model (free text, empty = CLI default), place (`worktree` default, `tab`, `pane`; the lead `here`); offers a secretary (Claude Haiku) and its email; writes `[agents.*]`; ends with "Start the team now?"
-- [ ] `tmv up`: no ville → runs the `tmv new` questions first; with a ville → builds the team with no questions. Per agent: skip if running, make its place, wait for the shell, `herdr agent start … -- --model …`, one at a time; then the first prompt with `tmv send`; then an `office` tab running `tmv`. Safe to run again
-- [ ] Who is the lead: `tmv up` inside an agent's pane → that agent; in a plain shell → Tomville starts the lead in a new tab. Written clearly in the README
-- [ ] Any agent that herdr can't detect is announced: pane, running process, last lines, known fix (script launcher, CLI missing, startup prompt such as folder trust, remembered path) or `herdr agent explain`. `tmv doctor` runs the same checks
+- [x] `tmv up`: no ville → runs the `tmv new` questions first; with a ville → builds the team with no questions. Per agent: skip if running, make its place, wait for the shell, `herdr agent start … -- --model …`, one at a time; then the first prompt with `tmv send`; then an `office` tab running `tmv`. Safe to run again
+- [x] Who is the lead: `tmv up` inside an agent's pane → that agent; in a plain shell → Tomville starts the lead in a new tab. Written clearly in the README
+- [x] Any agent that herdr can't detect is announced: pane, running process, last lines, known fix (script launcher, CLI missing, startup prompt such as folder trust, remembered path) or `herdr agent explain`. `tmv doctor` runs the same checks
 - [ ] `tmv setup launcher KIND`: wrapper in `~/.local/bin` that runs the real binary (asks first)
-- [ ] `tmv down` / `--office`: office only; `--agents`: confirmed stop of every configured ville agent, including pre-existing agents, then office; `NAME`: one owned agent. Keep worktrees, pre-existing panes and the caller (Tom approved #49).
-- [ ] README "Start your team" section; tests with recorded herdr JSON, no herdr (README and wizard tests done in #40; `up`/`down` tests with #39)
+  - Lead 2026-10-18: offline tests pass; not run live yet (the tablet already has a hand-made wrapper).
+- [x] `tmv down` / `--office`: office only; `--agents`: confirmed stop of every configured ville agent, including pre-existing agents, then office; `NAME`: one owned agent. Keep worktrees, pre-existing panes and the caller (Tom approved #49).
+- [x] README "Start your team" section; tests with recorded herdr JSON, no herdr (README and wizard tests done in #40; `up`/`down` tests with #39)
 
 **Check:** fresh install → `tmv new` → `tmv` shows the real team in both shapes, end to end. Auto setup: in a fresh herdr session with no ville, `tmv up` and answers only → every agent in `tmv status`, workers in their own worktrees, office tab open; `tmv up` again starts nothing; npm Codex without the launcher → `tmv up` names the pane, process and fix; `tmv down` → office gone, agents working; `tmv down --agents --yes` → ville agents stopped, owned panes gone, pre-existing panes and worktrees kept.
 
-Validation for #39: team lifecycle, launcher, diagnostics and wizard integration have offline tests using recorded herdr replies. Live auto-setup acceptance is pending the lead's run after Tom approves; the #39 PR gives the exact commands and expected results. Keep the auto-setup items unchecked until that Check passes. #49 adds fixture coverage for office-only default shutdown, confirmed full-team shutdown and pre-existing pane preservation; its live Check also waits for the lead after Tom approves.
+Lead Check 2026-10-18 (#39, #49), live on the tablet:
+- `tmv up` in a plain shell with a fresh 4-agent ville (Claude lead, Claude and Codex workers in worktrees, Haiku secretary in a tab): lead started in a new tab, workers in their own worktrees, secretary, office tab open. Codex stopped at its folder-trust question: reported with pane, process and "answer it yourself", left unanswered. After answering, `tmv up` again finished it and created no duplicates.
+- `tmv up` from the lead's pane with the running team in the ville: adopted the caller as lead, "already running" for the 3 workers, started nothing, opened the office.
+- `tmv down` (no flag): only the office closed, all agents kept working. `--office --agents` refused; `--agents` without a terminal and without `--yes` refused.
+- `tmv down --agents --yes` from the lead's pane: preview listed each agent; claude2, codex1 and secretary quit with their pre-existing panes kept at the shell; lead kept as caller; office closed. Worktrees untouched. `tmv up` then started all three again in new tabs, with first prompts and the office.
+- Not run live: npm Codex without the launcher (covered by offline tests) and `tmv setup launcher`.
 
 **Part 1 done:** ______
 
