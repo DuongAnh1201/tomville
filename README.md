@@ -2,6 +2,8 @@
 
 2026-10-16 · Tom Nguyen
 
+**Status (2026-10-17):** Part 1 milestones M0–M6 are done. M7 (interaction, install and auto team setup) is in progress: the `tmv new` agent questions are merged; `tmv up` / `tmv down` are in review. See [milestones.md](milestones.md).
+
 ## Summary
 
 Build a terminal app where each agent (Claude, Codex) is a pixel pet walking around a retro office. Its movement shows what the agent is doing. The app reads live status from herdr, which is already installed, and the task board from GitHub Issues (or `TASKS.md`), so v1 needs no change to the agent setup.
@@ -32,6 +34,20 @@ All in place on the development tablet (Ubuntu 26.04 in Termux PRoot, aarch64):
 - [x] `gh` logged in, with access to this repo
 
 Still needed at build time: Python 3.11+ and `uv` (install steps in [Install](#install)).
+
+### Running agents in Termux PRoot
+
+Things learned on the tablet that every setup there needs:
+
+| Problem | What you see | Fix |
+| --- | --- | --- |
+| npm Codex starts through a Node launcher, so herdr sees `node` (process name `MainThread`), not `codex` | `herdr agent start … --kind codex` times out; the agent never gets its name | A `~/.local/bin/codex` wrapper that `exec`s the real binary (`tmv setup launcher codex`); `~/.local/bin` first on `PATH` |
+| Codex's background server can't run in PRoot | Codex panics with `Function not implemented (os error 38)` and says to rerun with `--no-daemon` | Start Codex with `--no-daemon` (also for `resume` and `fork`) |
+| Codex's sandbox can't start in PRoot | Every command fails with `app-server socket directory has an unsupported host mount` | Start Codex with `--sandbox danger-full-access`; approvals then follow `--ask-for-approval` |
+| A crashed Codex leaves its session locked | "This conversation is open in another app" | `codex --no-daemon fork <session>` keeps the context in a new, unlocked session |
+| Claude Code asks whether to trust a new folder | `herdr agent start` reports the agent `blocked` during startup | Answer it yourself in that pane; Tomville never answers it |
+| A shell that already ran `codex` remembers the old path | The launcher is still used after the wrapper is installed | `hash -r`, or start in a fresh pane (`tmv up` always does) |
+| Agents start slowly | `herdr agent start` times out at its 30 s default | `--timeout 120000`; Tomville uses `start_timeout` (120 s) |
 
 ## What it looks like
 
@@ -94,6 +110,12 @@ The handover, step by step:
 | 6 | Boss reviews and closes | Issue closed (`Fixes #12`) | Card to Done; boss bubble: "merged ✓" |
 
 Changes made through `tmv task` and `tmv send` move pets at once, because Tomville logs them locally. Changes made elsewhere (the GitHub website or app) show up on the next board check.
+
+**Team rules** (in each project's `AGENTS.md`):
+
+- Only the lead prompts other agents, with `tmv send`.
+- **Workers never use herdr**, not even to read: no `herdr` commands, no `tmv up`, `tmv down` or `tmv send`, no creating or closing panes, tabs, workspaces or worktrees. Only the lead does, after the user approves. A Check that needs real herdr goes in the PR for the lead to run.
+- An optional **secretary** (Claude Haiku) writes no code. When the lead asks, it files GitHub issues and emails the user when an issue is merged or a milestone is done, with the worker's full summary comment from the issue. It emails only the one address in its `[agents.secretary]` table.
 
 ### 2. Pipeline
 
