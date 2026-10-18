@@ -1,0 +1,12 @@
+  /review - review any changes and find issues
+
+
+
+
+
+
+
+› Ask Codex to do anything
+
+  GPT-6.1-Sol low · /tmp
+  ← for agents · ? for shortcuts

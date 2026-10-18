@@ -396,7 +396,8 @@ You answer a few questions once; Tomville builds the team in herdr. Nobody types
 ```bash
 tmv new      # the questions, saved in .tomville/ville.toml
 tmv up       # builds the team (no ville yet? it asks the tmv new questions first)
-tmv down     # stops what tmv up started
+tmv down     # closes only the office; agents keep working
+tmv down --agents  # confirms, then stops all configured agents and the office
 ```
 
 **Questions.** For each agent: its name, its **kind** (`claude`, `codex`, `gemini`, … any kind `herdr agent start --kind` knows), its **model** (free text passed as `--model`; empty means the CLI's own default, so the list never goes stale) and its **place**:
@@ -428,13 +429,21 @@ role = "secretary"
 email = "tom@example.com"
 ```
 
-`tmv new` ends with "Start the team now?".
+`tmv new` ends with "Start the team now?". Answering yes starts the saved team immediately; `--yes` saves the defaults without starting agents. With an existing ville, `tmv up` asks no questions and starts agents sequentially, then opens the office. Running it again reuses running agents and the office.
 
 **Who is the lead.** Run `tmv up` inside an agent's pane and that agent is the lead; no second lead is started. Run it in a plain shell and Tomville starts the lead too, in a new tab.
 
 **If herdr can't detect an agent**, Tomville names the pane, the running process and the last lines, with the known fix: a script launcher in front of the real binary (`tmv setup launcher codex`), a startup prompt such as folder trust (answer it yourself), a CLI that is not installed, or a shell that remembers an old path. `tmv doctor` runs the same checks without starting anything.
 
-`tmv down` quits the agents `tmv up` started and closes their panes; worktrees are kept, and so is the lead's own pane.
+`tmv down` and `tmv down --office` close only the office tab recorded in `.tomville/team.json`; every agent keeps working. `tmv down NAME` stops one agent owned by `tmv up` and keeps everything else.
+
+`tmv down --agents` stops every running agent configured in the ville, including agents that were already running before `tmv up`, then closes the office. It lists their statuses first, marks working agents as busy and blocked agents as waiting for an answer, and asks once `Stop them? [y/N]`. Pressing Enter declines. Use `--yes` to skip confirmation; non-interactive use requires it. Workers stop first, then the secretary, then the lead. The caller's pane is reported as `kept: lead/caller` and left running.
+
+Owned panes are closed after their agent quits. Pre-existing panes stay at their shell, reported as `stopped (pane kept)`. Worktrees and agents outside the ville always stay. The git-ignored ownership record is updated for successful stops; panes with replaced or uncertain identities are retained for inspection. `--office`, `--agents` and `NAME` are mutually exclusive.
+
+If startup stops at a trust or login question, answer it in the named pane yourself and retry `tmv up`. The pending first message is sent once the agent is ready. A failed start whose pane is still open is retained for inspection; use `tmv down NAME` before starting a replacement. Failed agents do not prevent the rest of the team from starting.
+
+`tmv setup launcher codex` supports npm Codex's native binary and preserves its package environment. It asks before writing `~/.local/bin/codex`, keeps an existing file as `codex.bak`, and refuses to overwrite an existing backup. `--yes` accepts the write. Other launcher kinds report that automatic resolution is unsupported instead of guessing a binary or its environment. Put `~/.local/bin` first on `PATH` and use a fresh pane afterwards. Startup uses `start_timeout` seconds (default 120); herdr requires at least 3001 milliseconds, so smaller configured values use that minimum for the agent-start call.
 
 ## Install and setup from the terminal
 
@@ -514,7 +523,7 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `doctor` | Check the setup and print fixes | `--json` |
 | `new [NAME]` | Create a new ville for this project: name, team shape, agents (kind, model, place), secretary, pets, board, emoji check. Saved in `.tomville/ville.toml`. Bare `tomville` offers this when the project has no ville yet | `--yes` (accept defaults), `--claude-settings FILE` (hook file, default `~/.claude/settings.json`) |
 | `up` | Build the team in herdr from the ville (see [Start your team](#start-your-team)); with no ville it asks the `new` questions first. Safe to run again | |
-| `down [NAME]` | Stop what `up` started; worktrees and the lead's own pane stay | |
+| `down [NAME] [--office \| --agents] [--yes]` | Default/`--office`: close only the office. `NAME`: one owned agent. `--agents`: confirm, then stop all ville agents and the office; pre-existing panes and the caller stay | |
 | `setup launcher KIND` | Write a `~/.local/bin` wrapper that runs the real binary, so herdr can detect it (asks first) | |
 | `setup` | Redo parts of setup for this ville: emoji calibration, labels, agent rules, hook | `--yes` (no questions; skips the emoji test unless `--style` is given), `--style`, `--theme`, `--claude-settings FILE` |
 | `pets list` | Show every pet, animated | `--style` |
