@@ -225,11 +225,12 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 ## M15 · Publish
 
-- [ ] Licence chosen and `LICENSE` added
+- [x] Licence chosen and `LICENSE` added (MIT)
 - [ ] `install.sh` one-line installer (Ubuntu x86_64/aarch64, macOS, Termux PRoot)
 - [ ] `tmv update` and `tmv uninstall`
 - [ ] GitHub Actions: tests on push; tag `v*` → PyPI (trusted publishing) + GitHub Release
-- [ ] Repo made public
+  - Lead 2026-10-17: `release.yml` builds, tests, installs the wheel and uploads to PyPI on a `v*` tag (TestPyPI when run by hand). Still to do: tests on every push, GitHub Release. Setup steps in [RELEASING.md](RELEASING.md).
+- [x] Repo made public
 
 **Check:** `uv tool install tomville` and the `curl … | sh` line both work on a clean machine.
 
@@ -248,6 +249,7 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-17: PyPI packaging pulled forward from M15 at Tom's request: MIT licence, package page `docs/pypi.md`, metadata, release workflow. First release 0.1.0 waits for M7 auto setup (#39).
 - 2026-10-17: Auto team setup (`tmv up`, `tmv down`, agent kinds and models, secretary, detection messages) added to M7, since M7's Check already asks for `tmv new` → real team end to end. Lead shape only; pipeline later.
 - 2026-10-17: M0–M6 done. M7 (interaction and install) is next in Part 1.
 - 2026-10-17: No work on `main` for anyone; every change is a PR linked to an issue, with a detailed issue comment; the lead checks conflicts and squash-merges (#7).

@@ -2,24 +2,48 @@
 name = "tomville"
 version = "0.1.0"
 description = "A retro game view of your agent team, built on top of herdr"
-readme = "README.md"
+readme = "docs/pypi.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [{ name = "Tom Nguyen", email = "tomnguyen6766@gmail.com" }]
+keywords = ["herdr", "agents", "claude", "codex", "tui", "textual", "terminal", "game"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development",
+    "Topic :: Terminals",
+]
 dependencies = [
     "textual>=8.2.8",
     "tomli-w>=1.2.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/DuongAnh1201/tomville"
+Source = "https://github.com/DuongAnh1201/tomville"
+Issues = "https://github.com/DuongAnh1201/tomville/issues"
 
 [project.scripts]
 tomville = "tomville.cli:main"
 tmv = "tomville.cli:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tomville"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/tomville", "tests", "docs/pypi.md", "README.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
