@@ -285,3 +285,15 @@ def test_jump_stays_put_when_there_is_no_room():
     w = make(agent("codex1", Status.BLOCKED))
     w._blocked |= {(x, y) for x in range(128) for y in range(30)}  # boxed in
     assert w._jump_to(10, 10) == 10
+
+
+def test_lounge_pets_never_overlap():
+    world = make(*(agent(n) for n in ("claude2", "codex1", "codex2", "secretary")), w=80, h=24)
+
+    def no_overlap():
+        settled = [p.cell for p in world.pets.values() if not p.path]
+        for i, (x, y) in enumerate(settled):
+            for ox, oy in settled[i + 1:]:
+                assert not (y == oy and abs(x - ox) < 2), f"pets overlap at {(x, y)} and {(ox, oy)}"
+
+    run(world, 60, watch=no_overlap)

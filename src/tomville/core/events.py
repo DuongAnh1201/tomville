@@ -67,8 +67,20 @@ class EventReader:
                 emit(event)
         self.snapshot(list(self.agents.values()), list(self.cards.values()))
 
+    def _unique_names(self, agents):
+        """One name per pane. herdr shows a new pane before `agent start` names it,
+        so it briefly carries its kind as a name (`claude`), which can be another
+        agent's name. The pane that had the name keeps it; the newcomer gets
+        `claude@<pane>` until its real name arrives."""
+        owners = {}
+        for agent in sorted(agents, key=lambda a: self.agents.get(a.pane_id, a).name != a.name):
+            if agent.name in owners:
+                agent = replace(agent, name=f'{agent.name}@{agent.pane_id}')
+            owners[agent.name] = agent
+        return list(owners.values())
+
     def update_agents(self, agents):
-        current = {a.pane_id: a for a in agents}
+        current = {a.pane_id: a for a in self._unique_names(agents)}
         events = []
         for pane, agent in current.items():
             old = self.agents.get(pane)
