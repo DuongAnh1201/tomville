@@ -16,6 +16,7 @@ Tomville is built on top of [herdr](https://herdr.dev), the terminal workspace m
 
 ## Requirements
 
+- Linux or macOS (also runs in Termux on Android, inside a PRoot Ubuntu)
 - Python 3.11 or newer
 - [herdr](https://herdr.dev) on your `PATH`, with its integrations for your agents (`herdr integration install claude`, `herdr integration install codex`)
 - The agent CLIs you want in the office (Claude Code, Codex, Gemini, …)

@@ -3,6 +3,7 @@ from dataclasses import replace
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 
 import pytest
 
@@ -85,7 +86,8 @@ def test_settings_precedence_and_validation(tmp_path, monkeypatch):
 
 def test_socket_status_and_disconnect_polling(tmp_path, monkeypatch):
     async def run():
-        socket = tmp_path / 'herdr.sock'
+        # Short folder: macOS limits socket paths to 104 bytes and its tmp_path is long.
+        socket = Path(tempfile.mkdtemp(prefix='tmv', dir='/tmp')) / 'herdr.sock'
         monkeypatch.setenv('HERDR_SOCKET_PATH', str(socket))
         agent = parse_agents(json.loads((FIXTURES / 'herdr_agent_list.json').read_text()))[0]
         calls = 0

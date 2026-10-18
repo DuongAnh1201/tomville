@@ -9,15 +9,35 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
       - name: Tests
-        run: uv run pytest -q
+        run: uv run pytest -q -o faulthandler_timeout=120
+      - name: Build, install and run the wheel
+        run: |
+          uv build
+          uv venv /tmp/check
+          uv pip install --python /tmp/check dist/*.whl
+          /tmp/check/bin/tmv --version
+          cd "$RUNNER_TEMP" && /tmp/check/bin/tmv --demo status --json > /dev/null
+
+  build:
+    needs: macos
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Tests
+        run: uv run pytest -q -o faulthandler_timeout=120
       - name: Tag matches the version
         if: startsWith(github.ref, 'refs/tags/')
         run: |
