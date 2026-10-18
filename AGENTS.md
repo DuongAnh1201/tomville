@@ -21,7 +21,16 @@ When these disagree, `milestones.md` wins for scope and `idea.md` for decisions.
 | `codex1` | Worker: data side (herdr events, GitHub board, CLI commands) |
 | `secretary` | Helper (Claude Haiku): files GitHub issues and emails Tom when work is finished. Writes no code (see [The secretary](#the-secretary)) |
 
-Only the lead sends prompts to other agents. Workers don't control other herdr panes.
+Only the lead sends prompts to other agents.
+
+### Workers never use herdr
+
+Workers (everyone except the lead) don't run herdr in any way, not even to read:
+
+- no `herdr` commands, and no `tmv up`, `tmv down` or `tmv send`
+- no creating or closing panes, tabs, workspaces or worktrees
+
+Only the lead does these, and only after Tom approves. Tests use the recorded JSON in `tests/fixtures/`. When a Check needs real herdr, write in your PR exactly what to run; the lead runs it once Tom approves, and cleans up after.
 
 ## Never work on `main`
 
@@ -120,7 +129,7 @@ The lead knows when you finish because herdr reports your status (`done`, `block
 
 - Ubuntu in Termux PRoot on an Android tablet (aarch64). No `sudo`; install with `apt` or `uv`.
 - CPU and battery are limited: don't leave watchers, servers or long loops running after you finish.
-- herdr runs here; `herdr agent list` works in every pane.
+- herdr runs here, but only the lead uses it (see [Workers never use herdr](#workers-never-use-herdr)).
 
 ## The secretary
 
