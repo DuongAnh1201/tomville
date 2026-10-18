@@ -29,6 +29,10 @@ HOOK_COMMAND = 'd=$(cat); case "$d" in *"agent prompt"*) printf %s "$d" | tmv ho
 HOOK_MARKER = 'tmv hook claude-pre-tool-use'
 RULER = '|..|..|..|..|..|..|..|..|\n|🐱|🐶|🐑|🐸|🦊|🐼|🤖|👾|'
 Ask = Callable[[str, str], str]  # (question, default) -> answer
+KINDS = ('claude', 'codex', 'gemini', 'cursor', 'opencode', 'copilot', 'pi', 'amp', 'grok', 'qwen', 'kimi')  # a few `herdr agent start --kind` values
+ANY_KIND = re.compile(r'[a-z][a-z0-9-]*')
+PLACES = ('worktree', 'tab', 'pane')  # the lead is always `here`
+SECRETARY_MODEL = 'claude-haiku-5-5'
 
 
 def ville_path(project: Path) -> Path:
@@ -50,6 +54,8 @@ class Answers:
     repo: str = ''
     check_seconds: float = 60
     style: str = 'emoji'
+    agent_specs: dict = field(default_factory=dict)  # lead shape: name -> [agents.NAME] table, in order
+    secretary: str = ''  # name of the secretary in agent_specs, if any
 
     @property
     def agents(self) -> list[str]:
@@ -64,13 +70,16 @@ class Answers:
         board: dict = {'source': self.source, 'check_seconds': self.check_seconds}
         if self.repo and self.source == 'github':
             board['repo'] = self.repo
-        return {
+        data = {
             'name': self.name,
             'style': self.style,
             'team': team,
             'board': board,
-            'pets': {a: {'sprite': self.pets.get(a) or default_pet(i)} for i, a in enumerate(self.agents)},
+            'pets': {a: {'sprite': self.pets.get(a) or default_pet(i)} for i, a in enumerate(self.agents + ([self.secretary] if self.secretary else []))},
         }
+        if self.agent_specs:
+            data['agents'] = self.agent_specs
+        return data
 
 
 def default_pet(index: int) -> str:
@@ -99,10 +108,11 @@ def ask_answers(project: Path, name: str | None, ask: Ask) -> Answers:
     if a.shape == 'lead':
         a.lead = ask('Boss agent', 'claude').strip() or 'claude'
         a.workers = names(ask('Worker agents (comma separated)', 'codex1,codex2')) or ['codex1']
+        _ask_agents(project, a, ask)
     else:
         a.workers = names(ask('Pipeline stages in order (comma separated)', 'planner,coder,tester')) or ['planner']
     pets = available_pets()
-    for i, agent in enumerate(a.agents):
+    for i, agent in enumerate(a.agents + ([a.secretary] if a.secretary else [])):
         a.pets[agent] = _choice(ask, f'Pet for {agent} ({", ".join(pets)})', default_pet(i), tuple(pets))
     a.repo = github_repo(project)
     a.source = _choice(ask, 'Board (github = GitHub Issues, tasks-md = TASKS.md)', 'github' if a.repo else 'tasks-md', ('github', 'tasks-md'))
@@ -111,6 +121,43 @@ def ask_answers(project: Path, name: str | None, ask: Ask) -> Answers:
     a.check_seconds = _number(ask, 'Check the board every how many seconds', 60)
     a.style = calibrate(ask)
     return a
+
+
+def _ask_agents(project: Path, a: Answers, ask: Ask) -> None:
+    """Kind, model and place per agent, then the optional secretary (lead shape)."""
+    a.agent_specs[a.lead] = {'kind': _kind(ask, a.lead, 'claude'), 'model': _model(ask, a.lead), 'place': 'here'}
+    for worker in a.workers:
+        a.agent_specs[worker] = {
+            'kind': _kind(ask, worker, 'codex'),
+            'model': _model(ask, worker),
+            'place': _choice(ask, f'Where does {worker} work (worktree = own git worktree, tab, pane)', 'worktree', PLACES),
+        }
+    if ask('Add a secretary (Claude Haiku) to file issues and email you when work is finished? (yes/no)', 'yes').strip().lower().startswith('y'):
+        name = 'secretary'
+        while name in a.agent_specs:
+            name += '2'
+        email = ask('Email address for the secretary', git_email(project)).strip()
+        a.secretary = name
+        a.agent_specs[name] = {'kind': 'claude', 'model': SECRETARY_MODEL, 'place': 'tab', 'role': 'secretary', **({'email': email} if email else {})}
+
+
+def _kind(ask: Ask, agent: str, default: str) -> str:
+    while True:
+        value = ask(f'Kind of agent for {agent} ({", ".join(KINDS)}, or any kind herdr knows)', default).strip().lower() or default
+        if ANY_KIND.fullmatch(value):
+            return value
+        print('  a kind is a lowercase word such as claude or codex')
+
+
+def _model(ask: Ask, agent: str) -> str:
+    return ask(f'Model for {agent} (empty = the CLI\'s default)', '').strip()
+
+
+def git_email(project: Path) -> str:
+    try:
+        return run_command(['git', 'config', 'user.email'], project).strip()
+    except (OSError, subprocess.SubprocessError):
+        return ''
 
 
 def calibrate(ask: Ask, show: Callable[[str], None] = print) -> str:

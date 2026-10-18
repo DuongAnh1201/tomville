@@ -151,13 +151,13 @@ Done 2026-10-17 · PR #16, PR #21
 **Auto team setup (lead shape).** The user answers questions once; Tomville builds the team, nobody types `herdr` commands. Plan: [idea.md](idea.md#auto-team-setup).
 
 - [x] `[agents.NAME]` table in the ville (`kind`, `model`, `place`, `branch`, `role`, `email`) and `start_timeout`, read by `settings.py` (lead)
-- [ ] `tmv new` asks per agent: name, kind, model (free text, empty = CLI default), place (`worktree` default, `tab`, `pane`; the lead `here`); offers a secretary (Claude Haiku) and its email; writes `[agents.*]`; ends with "Start the team now?"
+- [x] `tmv new` asks per agent: name, kind, model (free text, empty = CLI default), place (`worktree` default, `tab`, `pane`; the lead `here`); offers a secretary (Claude Haiku) and its email; writes `[agents.*]`; ends with "Start the team now?"
 - [ ] `tmv up`: no ville → runs the `tmv new` questions first; with a ville → builds the team with no questions. Per agent: skip if running, make its place, wait for the shell, `herdr agent start … -- --model …`, one at a time; then the first prompt with `tmv send`; then an `office` tab running `tmv`. Safe to run again
 - [ ] Who is the lead: `tmv up` inside an agent's pane → that agent; in a plain shell → Tomville starts the lead in a new tab. Written clearly in the README
 - [ ] Any agent that herdr can't detect is announced: pane, running process, last lines, known fix (script launcher, CLI missing, startup prompt such as folder trust, remembered path) or `herdr agent explain`. `tmv doctor` runs the same checks
 - [ ] `tmv setup launcher KIND`: wrapper in `~/.local/bin` that runs the real binary (asks first)
 - [ ] `tmv down [NAME]`: stops what `tmv up` started (recorded in `.tomville/team.json`), keeps worktrees and the lead's own pane
-- [ ] README "Start your team" section; tests with recorded herdr JSON, no herdr
+- [ ] README "Start your team" section; tests with recorded herdr JSON, no herdr (README and wizard tests done in #40; `up`/`down` tests with #39)
 
 **Check:** fresh install → `tmv new` → `tmv` shows the real team in both shapes, end to end. Auto setup: in a fresh herdr session with no ville, `tmv up` and answers only → every agent in `tmv status`, workers in their own worktrees, office tab open; `tmv up` again starts nothing; npm Codex without the launcher → `tmv up` names the pane, process and fix; `tmv down` → its panes gone, worktrees kept.
 
