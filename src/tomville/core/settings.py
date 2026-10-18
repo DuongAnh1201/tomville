@@ -23,6 +23,49 @@ def load_reader_settings(project, *, config=None, source=None, check_seconds=Non
     return load_settings(project, config=config, source=source, check_seconds=check_seconds, poll_seconds=poll_seconds)
 
 
+PLACES = ('here', 'worktree', 'tab', 'pane')
+ROLES = ('', 'secretary')
+DEFAULT_START_TIMEOUT = 120.0  # seconds; agents start slowly under PRoot
+
+
+@dataclass(frozen=True)
+class AgentSpec:
+    """One `[agents.NAME]` table: what `tmv up` starts and where."""
+
+    name: str
+    kind: str
+    model: str = ''  # empty: the CLI's own default
+    place: str = 'worktree'
+    branch: str = ''  # worktree branch; empty: the agent's name
+    role: str = ''
+    email: str = ''  # secretary: the only address it sends to
+
+    def __post_init__(self):
+        for key in ('kind', 'model', 'branch', 'role', 'email'):
+            if not isinstance(getattr(self, key), str):
+                raise ValueError(f'agents.{self.name}.{key} must be text')
+        if not self.kind:
+            raise ValueError(f'agents.{self.name}.kind is missing')
+        if self.place not in PLACES:
+            raise ValueError(f'agents.{self.name}.place must be one of {PLACES}')
+        if self.role not in ROLES:
+            raise ValueError(f'agents.{self.name}.role must be one of {ROLES}')
+
+    @property
+    def worktree_branch(self) -> str:
+        return self.branch or self.name
+
+
+def agent_specs(table):
+    if not isinstance(table, dict) or any(not isinstance(v, dict) for v in table.values()):
+        raise ValueError('agents must contain one table per agent')
+    known = {'kind', 'model', 'place', 'branch', 'role', 'email'}
+    for name, spec in table.items():
+        if unknown := set(spec) - known:
+            raise ValueError(f'agents.{name}: unknown key {sorted(unknown)[0]}')
+    return {name: AgentSpec(name=name, **spec) for name, spec in table.items()}
+
+
 @dataclass
 class OfficeSettings(ReaderSettings):
     name: str = ''
@@ -36,10 +79,15 @@ class OfficeSettings(ReaderSettings):
     pets: dict = None
     demo: bool = False
     still: bool = False
+    agents: dict = None  # name -> AgentSpec, in ville order
+    start_timeout: float = DEFAULT_START_TIMEOUT
 
     def __post_init__(self):
         super().__post_init__()
         self.pets = self.pets or {}
+        self.agents = self.agents or {}
+        if isinstance(self.start_timeout, bool) or not 0 < self.start_timeout <= 300:
+            raise ValueError('start_timeout must be between 0 and 300 seconds')
         for key, choices in {'fps': (5, 10, 15, 30), 'style': ('emoji', 'ascii', 'blocks'), 'theme': ('night', 'game-boy', 'green-screen'), 'layout': ('auto', 'landscape', 'portrait'), 'team': ('lead', 'pipeline')}.items():
             if getattr(self, key) not in choices:
                 raise ValueError(f'{key} must be one of {choices}')
@@ -72,7 +120,7 @@ def merge_settings(base, updates):
 
 
 def settings_from_data(data):
-    for key in ('board', 'team', 'pets'):
+    for key in ('board', 'team', 'pets', 'agents'):
         if not isinstance(data.get(key, {}), dict):
             raise ValueError(f'{key} must be a TOML table')
     board = data.get('board', {})
@@ -92,6 +140,7 @@ def settings_from_data(data):
         layout=data.get('layout', 'auto'), team=team.get('shape', 'lead'), lead=team.get('lead'),
         stages=tuple(team.get('stages', [])), pets=data.get('pets', {}),
         demo=data.get('demo', False), still=data.get('still', False),
+        agents=agent_specs(data.get('agents', {})), start_timeout=float(data.get('start_timeout', DEFAULT_START_TIMEOUT)),
     )
 
 
@@ -135,7 +184,7 @@ def set_key(data, key, value):
 def write_config_value(path, key, text):
     import tomli_w
 
-    known = {'fps', 'style', 'theme', 'layout', 'poll_seconds', 'demo', 'still', 'board.source', 'board.repo', 'board.check_seconds', 'team.shape', 'team.lead', 'team.stages'}
+    known = {'fps', 'style', 'theme', 'layout', 'poll_seconds', 'demo', 'still', 'start_timeout', 'board.source', 'board.repo', 'board.check_seconds', 'team.shape', 'team.lead', 'team.stages'}
     pet_key = key.startswith('pets.') and len(key.split('.')) == 3 and key.split('.')[-1] in ('sprite', 'color')
     if key not in known and not pet_key:
         raise ValueError(f'unknown setting: {key}')

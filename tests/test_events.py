@@ -154,3 +154,37 @@ def test_new_pane_named_like_its_kind_does_not_replace_the_lead(tmp_path):
     assert [type(e) for e in named] == [AgentLeft, AgentAppeared]
     assert named[0].name == 'claude@p7' and named[1].agent.name == 'secretary'
     assert sorted(a.name for a in reader.agents.values()) == ['claude', 'secretary']
+
+
+def test_agents_table_in_the_ville(tmp_path):
+    from tomville.core.settings import AgentSpec, settings_from_data
+
+    settings = settings_from_data({
+        'team': {'shape': 'lead', 'lead': 'claude'},
+        'agents': {
+            'claude': {'kind': 'claude', 'model': 'claude-opus-5-5', 'place': 'here'},
+            'codex1': {'kind': 'codex'},
+            'secretary': {'kind': 'claude', 'model': 'claude-haiku-5-5', 'place': 'tab', 'role': 'secretary', 'email': 'tom@example.com'},
+        },
+        'start_timeout': 90,
+    })
+    assert list(settings.agents) == ['claude', 'codex1', 'secretary']
+    assert settings.agents['codex1'] == AgentSpec('codex1', 'codex')
+    assert settings.agents['codex1'].place == 'worktree' and settings.agents['codex1'].worktree_branch == 'codex1'
+    assert settings.agents['secretary'].role == 'secretary'
+    assert settings.start_timeout == 90
+    assert settings_from_data({}).agents == {} and settings_from_data({}).start_timeout == 120
+
+
+@pytest.mark.parametrize('agents', [
+    {'codex1': {}},
+    {'codex1': {'kind': 'codex', 'place': 'moon'}},
+    {'codex1': {'kind': 'codex', 'role': 'boss'}},
+    {'codex1': {'kind': 'codex', 'colour': 'red'}},
+    {'codex1': 'codex'},
+])
+def test_agents_table_rejects_bad_values(agents):
+    from tomville.core.settings import settings_from_data
+
+    with pytest.raises((ValueError, TypeError)):
+        settings_from_data({'agents': agents})

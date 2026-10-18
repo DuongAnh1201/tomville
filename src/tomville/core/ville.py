@@ -157,7 +157,7 @@ def update_ville(project: Path, updates: dict) -> Path:
 
 
 def expected_agents(settings) -> set[str]:
-    agents = set(settings.pets) | set(settings.stages)
+    agents = set(settings.pets) | set(settings.stages) | set(getattr(settings, 'agents', None) or {})
     if settings.lead:
         agents.add(settings.lead)
     return agents
