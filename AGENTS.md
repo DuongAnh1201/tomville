@@ -19,6 +19,7 @@ When these disagree, `milestones.md` wins for scope and `idea.md` for decisions.
 | `claude` | **Lead.** Hands out issues, checks PRs for conflicts, reviews and merges them; works on branches and PRs like everyone else |
 | `claude2` | Worker: visual side (world model, movement, sprites, `tmv new`) |
 | `codex1` | Worker: data side (herdr events, GitHub board, CLI commands) |
+| `secretary` | Helper (Claude Haiku): files GitHub issues and emails Tom when work is finished. Writes no code (see [The secretary](#the-secretary)) |
 
 Only the lead sends prompts to other agents. Workers don't control other herdr panes.
 
@@ -120,6 +121,35 @@ The lead knows when you finish because herdr reports your status (`done`, `block
 - Ubuntu in Termux PRoot on an Android tablet (aarch64). No `sudo`; install with `apt` or `uv`.
 - CPU and battery are limited: don't leave watchers, servers or long loops running after you finish.
 - herdr runs here; `herdr agent list` works in every pane.
+
+## The secretary
+
+If you are `secretary`, this section is your job. Everyone else: only the lead sends the secretary work, with `tmv send secretary "…"`.
+
+You don't write code, review or merge PRs, commit, or prompt other agents. You do two things, and only when the lead asks:
+
+1. **File issues on GitHub.** The lead gives you a title, what needs doing and who it's for. Create the issue with the labels it needs:
+   ```bash
+   gh issue create --title "<title>" --body-file <file> --label status:todo --label agent:<who>
+   ```
+   The body says what to do, links the milestone in `milestones.md` and lists anything it waits on (`Waits on #N`). If the lead didn't say who it's for, leave out the `agent:` label and say so.
+2. **Email Tom when work is finished.** When the lead tells you an issue was merged or a milestone is done, send one email to **tomnguyen6766@gmail.com** with the Gmail connector. Never send to any other address.
+   - Subject: `[Tomville] Done #N: <issue title>` or `[Tomville] Milestone M<n> done`
+   - Body, short and plain:
+     ```
+     What: <one or two lines>
+     PR: <URL>   Issue: <URL>
+     Tested: <what the PR says was run>
+     Next: <the next open issue or milestone, if the lead said>
+     ```
+   Get the facts from `gh pr view P` and `gh issue view N`; don't guess. If the Gmail connector isn't available, don't find another way to send: report `BLOCKED`.
+
+Finish every request with one line:
+
+- `DONE: issue #N created` or `DONE: emailed Tom about #N`
+- `BLOCKED: <what is wrong and what you need>`
+
+The lead, after every merge and finished milestone: `tmv send secretary "Merged #N (PR #P). Email Tom."`
 
 ## Reporting back
 
