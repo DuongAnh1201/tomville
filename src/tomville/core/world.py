@@ -37,6 +37,8 @@ Cell = tuple[int, int]
 
 WALK_SPEED = 8.0  # cells per second
 WANDER_SPEED = 1.5
+WANDER_TRIES = 8  # random lounge spots tried before staying put
+TILE = 2  # cells per sprite, as in sprites.py
 BUBBLE_SECONDS = 3.0
 SLEEP_AFTER = 60.0  # seconds idle before a pet sleeps
 BLINK_HZ = 2.0
@@ -455,12 +457,26 @@ class World:
         pet.wander_in -= dt
         if pet.wander_in <= 0:
             pet.wander_in = self.rng.uniform(2.0, 5.0)
-            cell = (
-                self.rng.randrange(lounge.x, lounge.x + lounge.w),
-                self.rng.randrange(lounge.y, lounge.y + lounge.h),
-            )
-            if self._walk(pet, cell):
-                pet.speed = WANDER_SPEED
+            for _ in range(WANDER_TRIES):
+                cell = (
+                    self.rng.randrange(lounge.x, lounge.x + lounge.w),
+                    self.rng.randrange(lounge.y, lounge.y + lounge.h),
+                )
+                if self._free_spot(pet, cell) and self._walk(pet, cell):
+                    pet.speed = WANDER_SPEED
+                    break
+
+    def _free_spot(self, pet: Pet, cell: Cell) -> bool:
+        """No other pet stands, or is heading, where its sprite or name would touch
+        this pet's sprite and name (one row: sprite, name, then a gap)."""
+        mine = Rect(cell[0], cell[1], TILE + cell_len(pet.name) + 2, 1)
+        for other in self.pets.values():
+            if other is pet or other.leaving:
+                continue
+            for x, y in [other.cell] + ([other.path[-1]] if other.path else []):
+                if _overlap(mine, Rect(x, y, TILE + cell_len(other.name) + 2, 1)):
+                    return False
+        return True
 
     def say(self, name: str, text: str) -> None:
         """Queue a bubble: they show one after another, a few seconds each."""

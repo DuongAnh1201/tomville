@@ -139,3 +139,18 @@ def test_first_state_goes_to_snapshot_not_events(tmp_path):
     assert [a.name for a in snapshots[-1][0]] == ['codex1'] and [c.id for c in snapshots[-1][1]] == ['T1']
     reader._emit('agents', reader.update_agents([replace(codex, status=Status.IDLE)]), emitted.append)
     assert emitted == [AgentStatusChanged('codex1', Status.WORKING, Status.IDLE)]
+
+
+def test_new_pane_named_like_its_kind_does_not_replace_the_lead(tmp_path):
+    def rows(*agents):
+        return parse_agents({'result': {'agents': [dict(pane_id=p, agent='claude', agent_status=s, **({'name': n} if n else {})) for p, s, n in agents]}})
+
+    reader = EventReader(tmp_path)
+    reader.update_agents(rows(('p2', 'working', None)))
+    # herdr shows the new pane before `agent start secretary` names it.
+    appeared = reader.update_agents(rows(('p2', 'working', None), ('p7', 'idle', None)))
+    assert [e.agent.name for e in appeared] == ['claude@p7']
+    named = reader.update_agents(rows(('p2', 'working', None), ('p7', 'idle', 'secretary')))
+    assert [type(e) for e in named] == [AgentLeft, AgentAppeared]
+    assert named[0].name == 'claude@p7' and named[1].agent.name == 'secretary'
+    assert sorted(a.name for a in reader.agents.values()) == ['claude', 'secretary']
