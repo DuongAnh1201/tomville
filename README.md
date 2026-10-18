@@ -374,7 +374,8 @@ You answer a few questions once; Tomville builds the team in herdr. Nobody types
 ```bash
 tmv new      # the questions, saved in .tomville/ville.toml
 tmv up       # builds the team (no ville yet? it asks the tmv new questions first)
-tmv down     # stops what tmv up started
+tmv down     # closes only the office; agents keep working
+tmv down --agents  # confirms, then stops all configured agents and the office
 ```
 
 **Questions.** For each agent: its name, its **kind** (`claude`, `codex`, `gemini`, … any kind `herdr agent start --kind` knows), its **model** (free text passed as `--model`; empty means the CLI's own default, so the list never goes stale) and its **place**:
@@ -412,7 +413,11 @@ email = "tom@example.com"
 
 **If herdr can't detect an agent**, Tomville names the pane, the running process and the last lines, with the known fix: a script launcher in front of the real binary (`tmv setup launcher codex`), a startup prompt such as folder trust (answer it yourself), a CLI that is not installed, or a shell that remembers an old path. `tmv doctor` runs the same checks without starting anything.
 
-`tmv down` quits the agents `tmv up` started and closes their panes; worktrees are kept, and so is the lead's own pane. Use `tmv down NAME` to stop just one owned agent. Ownership is saved in the git-ignored `.tomville/team.json`; pre-existing agents and office tabs are not adopted for shutdown. Pane and terminal IDs are checked before closing anything.
+`tmv down` and `tmv down --office` close only the office tab recorded in `.tomville/team.json`; every agent keeps working. `tmv down NAME` stops one agent owned by `tmv up` and keeps everything else.
+
+`tmv down --agents` stops every running agent configured in the ville, including agents that were already running before `tmv up`, then closes the office. It lists their statuses first, marks working agents as busy and blocked agents as waiting for an answer, and asks once `Stop them? [y/N]`. Pressing Enter declines. Use `--yes` to skip confirmation; non-interactive use requires it. Workers stop first, then the secretary, then the lead. The caller's pane is reported as `kept: lead/caller` and left running.
+
+Owned panes are closed after their agent quits. Pre-existing panes stay at their shell, reported as `stopped (pane kept)`. Worktrees and agents outside the ville always stay. The git-ignored ownership record is updated for successful stops; panes with replaced or uncertain identities are retained for inspection. `--office`, `--agents` and `NAME` are mutually exclusive.
 
 If startup stops at a trust or login question, answer it in the named pane yourself and retry `tmv up`. The pending first message is sent once the agent is ready. A failed start whose pane is still open is retained for inspection; use `tmv down NAME` before starting a replacement. Failed agents do not prevent the rest of the team from starting.
 
@@ -496,7 +501,7 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `doctor` | Check the setup and print fixes | `--json` |
 | `new [NAME]` | Create a new ville for this project: name, team shape, agents (kind, model, place), secretary, pets, board, emoji check. Saved in `.tomville/ville.toml`. Bare `tomville` offers this when the project has no ville yet | `--yes` (accept defaults), `--claude-settings FILE` (hook file, default `~/.claude/settings.json`) |
 | `up` | Build the team in herdr from the ville (see [Start your team](#start-your-team)); with no ville it asks the `new` questions first. Safe to run again | |
-| `down [NAME]` | Stop what `up` started; worktrees and the lead's own pane stay | |
+| `down [NAME] [--office \| --agents] [--yes]` | Default/`--office`: close only the office. `NAME`: one owned agent. `--agents`: confirm, then stop all ville agents and the office; pre-existing panes and the caller stay | |
 | `setup launcher KIND` | Write a `~/.local/bin` wrapper that runs the real binary, so herdr can detect it (asks first) | |
 | `setup` | Redo parts of setup for this ville: emoji calibration, labels, agent rules, hook | `--yes` (no questions; skips the emoji test unless `--style` is given), `--style`, `--theme`, `--claude-settings FILE` |
 | `pets list` | Show every pet, animated | `--style` |

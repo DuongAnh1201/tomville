@@ -81,9 +81,13 @@ def build_parser():
     setup.add_argument('kind', nargs='?')
     up = commands.add_parser('up', help='start the team and office in herdr')
     common_options(up)
-    down = commands.add_parser('down', help='stop panes started by tmv up; keep worktrees')
+    down = commands.add_parser('down', help='close the office, or stop the team with --agents')
     common_options(down)
-    down.add_argument('name', nargs='?')
+    stop = down.add_mutually_exclusive_group()
+    stop.add_argument('name', nargs='?')
+    stop.add_argument('--office', action='store_true', help='close only the owned office tab (default)')
+    stop.add_argument('--agents', action='store_true', help='stop all ville agents, then the office')
+    down.add_argument('--yes', action='store_true', help='confirm --agents without prompting')
     task = commands.add_parser('task', help='manage GitHub task cards')
     common_options(task)
     tasks = task.add_subparsers(dest='task_command', required=True)
@@ -241,7 +245,18 @@ def team_command(args, project, settings, command):
         if new_command(args, project, start=False):
             return 1
         settings = load_settings(project, config=args.config)
-    rows = team.up(project, settings) if command == 'up' else team.down(project, args.name)
+    def approve_shutdown(preview):
+        for row in preview:
+            print(f"{row['agent']} · {row['pane'] or '—'} · {row['result']}", file=sys.stderr, flush=True)
+        if args.yes:
+            return True
+        if not sys.stdin.isatty():
+            raise ValueError('tmv down --agents requires --yes when non-interactive')
+        return input('Stop them? [y/N] ').strip().lower() in ('y', 'yes')
+
+    rows = team.up(project, settings) if command == 'up' else team.down(
+        project, args.name, settings=settings, agents=args.agents, confirm=approve_shutdown)
+
     lines = ['agent · place · pane · result']
     for row in rows:
         lines.append(' · '.join(str(row.get(k) or '—') for k in ('agent', 'place', 'pane', 'result')))
@@ -250,7 +265,7 @@ def team_command(args, project, settings, command):
         if row.get('fix'):
             lines.append('Fix: ' + row['fix'])
     output(rows, args, '\n'.join(lines))
-    return int(any(row['result'] == 'FAILED' for row in rows))
+    return int(any(row['result'].startswith('FAILED') for row in rows))
 
 
 def offer_new(args, project, settings):

@@ -276,47 +276,90 @@ def up(project, settings):
     return rows
 
 
-def down(project, name=None):
+def down(project, name=None, *, settings=None, agents=False, confirm=None):
+    """Default to office-only. Full shutdown requires explicit confirmation."""
     if os.environ.get('HERDR_ENV') != '1':
         raise ValueError('run tmv down inside herdr')
     state = load_state(project)
     panes = herdr(project, 'pane', 'list')['panes']
-    agents = herdr(project, 'agent', 'list')['agents']
-    rows = []
-    targets = dict(state['agents'])
+    live_agents = herdr(project, 'agent', 'list')['agents'] if agents or name else []
+    caller = os.environ.get('HERDR_PANE_ID')
+    targets = []
+    if agents:
+        if settings is None or settings.team != 'lead':
+            raise ValueError('tmv down --agents requires lead-team settings')
+        specs = list(settings.agents.values())
+        specs.sort(key=lambda spec: 2 if spec.name == state.get('lead_spec', settings.lead) else 1 if spec.role == 'secretary' else 0)
+        for spec in specs:
+            target = settings.lead if spec.name == state.get('lead_spec', settings.lead) else spec.name
+            owned = state['agents'].get(spec.name)
+            if owned and not any(p['pane_id'] == owned['pane'] for p in panes):
+                owned = None
+            live = next((a for a in live_agents if agent_name(a) == target), None)
+            record = owned or ({'pane': live['pane_id'], 'terminal': live.get('terminal_id'), 'place': spec.place, 'kind': spec.kind} if live else {})
+            targets.append((target, spec.name, record, bool(owned)))
+    elif name:
+        record = state['agents'].get(name)
+        targets.append((name, name, record or {}, bool(record)))
     if not name and state.get('office'):
-        targets['office'] = state['office']
-    for target, owned in targets.items():
-        if name and target != name:
-            continue
-        pane = owned['pane']
-        live = next((p for p in panes if p['pane_id'] == pane), None)
+        targets.append(('office', None, state['office'], True))
+    if agents:
+        preview = []
+        for target, key, record, owned in targets:
+            live = next((a for a in live_agents if a['pane_id'] == record.get('pane')), None)
+            status = live.get('agent_status', 'unknown') if live else 'not running'
+            flag = ' (busy)' if status == 'working' else ' (waiting for an answer)' if status == 'blocked' else ''
+            result = 'kept: lead/caller' if caller and record.get('pane') == caller else status + flag
+            preview.append(dict(agent=target, pane=record.get('pane'), result=result))
+        if confirm is None or not confirm(preview):
+            return [dict(row, result='kept: lead/caller' if row['result'] == 'kept: lead/caller' else 'cancelled') for row in preview]
+    # Confirmation may take time: verify identities again before sending input.
+    if agents:
+        panes = herdr(project, 'pane', 'list')['panes']
+        live_agents = herdr(project, 'agent', 'list')['agents']
+    rows = []
+    for target, key, record, owned in targets:
+        pane = record.get('pane')
+        row = dict(agent=target, place=record.get('place', 'tab' if key is None else None), pane=pane)
         try:
-            if pane == os.environ.get('HERDR_PANE_ID') or pane == state.get('lead_pane'):
-                rows.append(dict(agent=target, pane=pane, result='kept lead/caller pane'))
+            if pane and (pane == caller or (not agents and pane == state.get('lead_pane'))):
+                rows.append(dict(row, result='kept: lead/caller'))
                 continue
-            if live and live.get('terminal_id') == owned.get('terminal'):
-                agent = next((a for a in agents if a['pane_id'] == pane), None)
-                occupant = agent_name(agent) if agent else None
-                if agent is None and (live.get('agent') or live.get('agent_session')):
-                    raise OSError('pane agent identity is unavailable; kept for inspection')
-                if occupant and occupant != target:
-                    raise OSError(f'pane now belongs to {occupant}; kept')
-                if occupant:
-                    if agent.get('agent_status') == 'blocked':
-                        herdr(project, 'agent', 'send-keys', pane, 'ctrl+c')
-                    elif owned.get('kind') in ('claude', 'codex'):
-                        herdr(project, 'agent', 'prompt', pane, '/quit')
-                    else:
-                        herdr(project, 'agent', 'send-keys', pane, 'ctrl+c')
-                    wait_shell(project, pane, 5)
-                herdr(project, 'pane', 'close', pane)
-            if target == 'office':
-                state['office'] = None
+            live = next((p for p in panes if p['pane_id'] == pane), None)
+            if live:
+                if not record.get('terminal') or live.get('terminal_id') != record['terminal']:
+                    raise OSError('pane terminal identity changed or is unavailable; kept')
+                agent = next((a for a in live_agents if a['pane_id'] == pane), None)
+                if key is None:
+                    if live.get('agent') or live.get('agent_session'):
+                        raise OSError('office now holds an agent; kept')
+                    herdr(project, 'tab', 'close', record['tab'])
+                else:
+                    occupant = agent_name(agent) if agent else None
+                    if occupant and occupant != target:
+                        raise OSError(f'pane now belongs to {occupant}; kept')
+                    if agent is None and (live.get('agent') or live.get('agent_session')):
+                        raise OSError('pane agent identity is unavailable; kept for inspection')
+                    if agent:
+                        kind = agent.get('agent') or record.get('kind')
+                        if kind in ('claude', 'codex'):
+                            herdr(project, 'agent', 'prompt', pane, '/quit')
+                        else:
+                            herdr(project, 'agent', 'send-keys', pane, 'ctrl+c')
+                        wait_shell(project, pane, 5)
+                    elif not owned:
+                        raise OSError('agent identity is unavailable; kept for inspection')
+                    if owned:
+                        herdr(project, 'pane', 'close', pane)
+                result = 'stopped' if owned else 'stopped (pane kept)'
             else:
-                del state['agents'][target]
+                result = 'not running'
+            if key is None:
+                state['office'] = None
+            elif key in state['agents']:
+                del state['agents'][key]
             save_state(project, state)
-            rows.append(dict(agent=target, pane=pane, result='stopped'))
+            rows.append(dict(row, result=result))
         except ERRORS as exc:
-            rows.append(dict(agent=target, pane=pane, result='FAILED', detail=str(exc)))
+            rows.append(dict(row, result=f'FAILED: {exc}'))
     return rows

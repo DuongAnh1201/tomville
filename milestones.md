@@ -156,12 +156,12 @@ Done 2026-10-17 · PR #16, PR #21
 - [ ] Who is the lead: `tmv up` inside an agent's pane → that agent; in a plain shell → Tomville starts the lead in a new tab. Written clearly in the README
 - [ ] Any agent that herdr can't detect is announced: pane, running process, last lines, known fix (script launcher, CLI missing, startup prompt such as folder trust, remembered path) or `herdr agent explain`. `tmv doctor` runs the same checks
 - [ ] `tmv setup launcher KIND`: wrapper in `~/.local/bin` that runs the real binary (asks first)
-- [ ] `tmv down [NAME]`: stops what `tmv up` started (recorded in `.tomville/team.json`), keeps worktrees and the lead's own pane
+- [ ] `tmv down` / `--office`: office only; `--agents`: confirmed stop of every configured ville agent, including pre-existing agents, then office; `NAME`: one owned agent. Keep worktrees, pre-existing panes and the caller (Tom approved #49).
 - [ ] README "Start your team" section; tests with recorded herdr JSON, no herdr (README and wizard tests done in #40; `up`/`down` tests with #39)
 
-**Check:** fresh install → `tmv new` → `tmv` shows the real team in both shapes, end to end. Auto setup: in a fresh herdr session with no ville, `tmv up` and answers only → every agent in `tmv status`, workers in their own worktrees, office tab open; `tmv up` again starts nothing; npm Codex without the launcher → `tmv up` names the pane, process and fix; `tmv down` → its panes gone, worktrees kept.
+**Check:** fresh install → `tmv new` → `tmv` shows the real team in both shapes, end to end. Auto setup: in a fresh herdr session with no ville, `tmv up` and answers only → every agent in `tmv status`, workers in their own worktrees, office tab open; `tmv up` again starts nothing; npm Codex without the launcher → `tmv up` names the pane, process and fix; `tmv down` → office gone, agents working; `tmv down --agents --yes` → ville agents stopped, owned panes gone, pre-existing panes and worktrees kept.
 
-Validation for #39: team lifecycle, launcher, diagnostics and wizard integration have offline tests using recorded herdr replies. Live auto-setup acceptance is pending the lead's run after Tom approves; the #39 PR gives the exact commands and expected results. Keep the auto-setup items unchecked until that Check passes.
+Validation for #39: team lifecycle, launcher, diagnostics and wizard integration have offline tests using recorded herdr replies. Live auto-setup acceptance is pending the lead's run after Tom approves; the #39 PR gives the exact commands and expected results. Keep the auto-setup items unchecked until that Check passes. #49 adds fixture coverage for office-only default shutdown, confirmed full-team shutdown and pre-existing pane preservation; its live Check also waits for the lead after Tom approves.
 
 **Part 1 done:** ______
 

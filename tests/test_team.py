@@ -132,11 +132,11 @@ def test_down_only_owned_identity_keeps_worktrees_and_caller(runtime, monkeypatc
     panes.extend([{'pane_id': 'owned', 'terminal_id': 'term1', 'agent': 'codex', 'name': 'worker'}, {'pane_id': 'caller', 'terminal_id': 'term1'}, {'pane_id': 'reused', 'terminal_id': 'new'}])
     agents.append({'pane_id': 'owned', 'name': 'worker', 'agent': 'codex'})
     monkeypatch.setenv('HERDR_PANE_ID', 'caller')
-    rows = team.down(project)
+    rows = team.down(project, settings=settings(worker=AgentSpec('worker', 'codex'), lead=AgentSpec('lead', 'claude'), stale=AgentSpec('stale', 'claude')), agents=True, confirm=lambda rows: True)
     assert [a for a, kw in calls if a[1:3] == ['pane', 'close']] == [['herdr', 'pane', 'close', 'owned']]
     assert any(a[-1] == '/quit' for a, kw in calls)
     assert not any(a[1] == 'worktree' for a, kw in calls)
-    assert set(team.load_state(project)['agents']) == {'lead'}
+    assert set(team.load_state(project)['agents']) == {'lead', 'stale'}
 
 
 def test_down_does_not_close_replacement_agent(runtime):
@@ -144,7 +144,7 @@ def test_down_does_not_close_replacement_agent(runtime):
     team.save_state(project, {'agents': {'worker': {'pane': 'p', 'terminal': 't', 'kind': 'codex'}}, 'office': None})
     panes.append({'pane_id': 'p', 'terminal_id': 't', 'name': 'other', 'agent': 'claude'})
     agents.append({'pane_id': 'p', 'name': 'other', 'agent': 'claude'})
-    assert team.down(project, 'worker')[0]['result'] == 'FAILED'
+    assert team.down(project, 'worker')[0]['result'].startswith('FAILED')
     assert not any(a[1:3] == ['pane', 'close'] for a, kw in calls)
 
 
@@ -275,5 +275,152 @@ def test_down_preserves_agent_with_unavailable_identity(runtime):
     project, calls, agents, panes, tabs = runtime
     team.save_state(project, {'agents': {'worker': {'pane': 'p', 'terminal': 't', 'kind': 'codex'}}, 'office': None})
     panes.append({'pane_id': 'p', 'terminal_id': 't', 'agent': 'codex'})
-    assert team.down(project)[0]['result'] == 'FAILED'
+    assert team.down(project, 'worker')[0]['result'].startswith('FAILED')
     assert not any(a[1:3] == ['pane', 'close'] for a, kw in calls)
+
+
+def office_state(runtime):
+    project, calls, agents, panes, tabs = runtime
+    pane = recorded('herdr_tab_create.json')['result']['root_pane']
+    panes.append(pane)
+    record = {'pane': pane['pane_id'], 'terminal': pane['terminal_id'], 'tab': pane['tab_id']}
+    team.save_state(project, {'agents': {'working': {'pane': 'working', 'terminal': 'busy', 'kind': 'codex'}}, 'office': record})
+    agents.append({'pane_id': 'working', 'name': 'working', 'agent': 'codex', 'agent_status': 'working'})
+    return record
+
+
+@pytest.mark.parametrize('option', [[], ['--office']])
+def test_down_default_and_office_keep_all_agents(runtime, option):
+    project, calls, agents, panes, tabs = runtime
+    office = office_state(runtime)
+    assert main(['down', *option, '-C', str(project)]) == 0
+    assert any(a == ['herdr', 'tab', 'close', office['tab']] for a, kw in calls)
+    assert not any(a[1:3] in (['agent', 'prompt'], ['agent', 'send-keys'], ['agent', 'list']) for a, kw in calls)
+    assert 'working' in team.load_state(project)['agents']
+
+
+def shutdown_team(runtime):
+    project, calls, agents, panes, tabs = runtime
+    office = office_state(runtime)
+    agents.clear()
+    conf = settings(boss=AgentSpec('boss', 'claude', place='here'), secretary=AgentSpec('secretary', 'claude', role='secretary'), worker=AgentSpec('worker', 'codex'), outsider_missing=AgentSpec('outsider_missing', 'gemini'))
+    for name, status in [('boss', 'idle'), ('secretary', 'blocked'), ('worker', 'working'), ('unrelated', 'working')]:
+        agent = dict(recorded('herdr_agent_start.json')['result']['agent'], name=name, agent='codex' if name == 'worker' else 'claude', pane_id=name, terminal_id='term-' + name, agent_status=status)
+        agents.append(agent)
+        panes.append(dict(agent))
+    state = team.load_state(project)
+    state['agents'] = {'worker': {'pane': 'worker', 'terminal': 'term-worker', 'kind': 'codex'}}
+    team.save_state(project, state)
+    return conf, office
+
+
+def test_full_shutdown_order_owned_and_existing_panes(runtime):
+    project, calls, *_ = runtime
+    conf, office = shutdown_team(runtime)
+    previews = []
+    rows = team.down(project, settings=conf, agents=True, confirm=lambda rows: previews.append(rows) or True)
+    assert [r['agent'] for r in rows] == ['worker', 'outsider_missing', 'secretary', 'boss', 'office']
+    assert [r['result'] for r in rows] == ['stopped', 'not running', 'stopped (pane kept)', 'stopped (pane kept)', 'stopped']
+    assert any(r['result'] == 'working (busy)' for r in previews[0])
+    assert any(r['result'] == 'blocked (waiting for an answer)' for r in previews[0])
+    assert [a[3] for a, kw in calls if a[1:3] == ['agent', 'prompt']] == ['worker', 'secretary', 'boss']
+    assert [a[3] for a, kw in calls if a[1:3] == ['pane', 'close']] == ['worker']
+    assert not any('unrelated' in a for a, kw in calls)
+    assert team.load_state(project)['agents'] == {} and team.load_state(project)['office'] is None
+
+
+def test_full_shutdown_keeps_caller_and_reports_it(runtime, monkeypatch):
+    project, calls, *_ = runtime
+    conf, _ = shutdown_team(runtime)
+    monkeypatch.setenv('HERDR_PANE_ID', 'boss')
+    previews = []
+    rows = team.down(project, settings=conf, agents=True, confirm=lambda rows: previews.append(rows) or True)
+    assert next(r for r in rows if r['agent'] == 'boss')['result'] == 'kept: lead/caller'
+    assert next(r for r in previews[0] if r['agent'] == 'boss')['result'] == 'kept: lead/caller'
+    assert not any(a[1:3] == ['agent', 'prompt'] and a[3] == 'boss' for a, kw in calls)
+
+
+def test_declined_shutdown_changes_nothing(runtime):
+    project, calls, *_ = runtime
+    conf, _ = shutdown_team(runtime)
+    before = (project / team.STATE).read_text()
+    rows = team.down(project, settings=conf, agents=True, confirm=lambda rows: False)
+    assert all(r['result'] == 'cancelled' for r in rows)
+    assert (project / team.STATE).read_text() == before
+    assert all(a[1:3] in (['pane', 'list'], ['agent', 'list']) for a, kw in calls)
+
+
+@pytest.mark.parametrize('options', [['--office', '--agents'], ['worker', '--office'], ['worker', '--agents']])
+def test_shutdown_conflicting_options_are_usage_errors(runtime, options):
+    project, calls, *_ = runtime
+    with pytest.raises(SystemExit) as exc:
+        main(['down', *options, '-C', str(project)])
+    assert exc.value.code == 2 and calls == []
+
+
+def test_full_shutdown_noninteractive_requires_yes(runtime, monkeypatch, capsys):
+    project, calls, *_ = runtime
+    ville.write_ville(project, {'team': {'shape': 'lead', 'lead': 'boss'}, 'agents': {'boss': {'kind': 'claude'}}})
+    monkeypatch.setattr('sys.stdin.isatty', lambda: False)
+    with pytest.raises(SystemExit) as exc:
+        main(['down', '--agents', '-C', str(project)])
+    assert exc.value.code == 2
+    assert 'requires --yes when non-interactive' in capsys.readouterr().err
+    assert all(a[1:3] in (['pane', 'list'], ['agent', 'list']) for a, kw in calls)
+    assert main(['down', '--agents', '--yes', '-C', str(project)]) == 0
+
+
+def test_full_shutdown_default_no_and_prompt_flags(runtime, monkeypatch, capsys):
+    project, calls, *_ = runtime
+    conf, _ = shutdown_team(runtime)
+    ville.write_ville(project, {'team': {'shape': 'lead', 'lead': 'boss'}, 'agents': {'worker': {'kind': 'codex'}, 'secretary': {'kind': 'claude', 'role': 'secretary'}, 'boss': {'kind': 'claude'}}})
+    monkeypatch.setattr('sys.stdin.isatty', lambda: True)
+    prompts = []
+    monkeypatch.setattr('builtins.input', lambda text: prompts.append(text) or '')
+    assert main(['down', '--agents', '-C', str(project)]) == 0
+    assert prompts == ['Stop them? [y/N] ']
+    output = capsys.readouterr().err
+    assert 'working (busy)' in output and 'blocked (waiting for an answer)' in output
+    assert all(a[1:3] in (['pane', 'list'], ['agent', 'list']) for a, kw in calls)
+
+
+def test_full_shutdown_adopted_lead_stops_when_not_caller(runtime):
+    project, calls, *_ = runtime
+    conf, _ = shutdown_team(runtime)
+    state = team.load_state(project)
+    state['lead_pane'] = 'boss'
+    team.save_state(project, state)
+    rows = team.down(project, settings=conf, agents=True, confirm=lambda rows: True)
+    assert next(r for r in rows if r['agent'] == 'boss')['result'] == 'stopped (pane kept)'
+
+
+def test_named_shutdown_keeps_office_and_other_agents(runtime):
+    project, calls, *_ = runtime
+    shutdown_team(runtime)
+    rows = team.down(project, 'worker')
+    assert [r['agent'] for r in rows] == ['worker']
+    assert rows[0]['result'] == 'stopped'
+    assert team.load_state(project)['office'] is not None
+    assert not any(a[1:3] == ['tab', 'close'] for a, kw in calls)
+
+
+def test_full_shutdown_rechecks_identity_after_confirmation(runtime):
+    project, calls, agents, panes, tabs = runtime
+    conf, _ = shutdown_team(runtime)
+    def approve(rows):
+        next(a for a in agents if a['name'] == 'worker')['name'] = 'replacement'
+        return True
+    rows = team.down(project, settings=conf, agents=True, confirm=approve)
+    assert next(r for r in rows if r['agent'] == 'worker')['result'].startswith('FAILED: pane now belongs to replacement')
+    assert not any(a[1:3] == ['agent', 'prompt'] and a[3] == 'worker' for a, kw in calls)
+
+
+def test_full_shutdown_includes_running_agent_with_gone_owned_pane(runtime):
+    project, calls, *_ = runtime
+    conf, _ = shutdown_team(runtime)
+    state = team.load_state(project)
+    state['agents']['worker']['pane'] = 'gone'
+    team.save_state(project, state)
+    rows = team.down(project, settings=conf, agents=True, confirm=lambda rows: True)
+    assert next(r for r in rows if r['agent'] == 'worker')['result'] == 'stopped (pane kept)'
+    assert not any(a == ['herdr', 'pane', 'close', 'worker'] for a, kw in calls)

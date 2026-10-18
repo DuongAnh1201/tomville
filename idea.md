@@ -240,7 +240,7 @@ email = "tom@example.com"
 
 Anything else: the facts plus `herdr agent explain`. `tmv doctor` runs the same checks without starting anything.
 
-**`tmv down [NAME]`** quits the agents `tmv up` started (recorded in `.tomville/team.json`, git-ignored), then closes their panes or tabs. Worktrees are kept, they hold work; the lead's own pane is never closed.
+**Shutdown (updated with Tom's approval, 2026-10-18, #49).** `tmv down` / `--office` closes only the recorded office tab and keeps every agent working. `tmv down --agents` lists configured agents with their statuses and asks once `Stop them? [y/N]` (`--yes` required non-interactively), then stops workers, secretary, lead and office in that order. It includes pre-existing ville agents: their panes remain at the shell; panes owned in `.tomville/team.json` close. The caller's own pane is kept, as are worktrees and agents outside the ville. `tmv down NAME` keeps the original single-owned-agent behavior. `NAME`, `--office` and `--agents` cannot be combined.
 
 ## Later updates
 
