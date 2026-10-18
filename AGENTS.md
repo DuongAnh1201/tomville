@@ -135,14 +135,21 @@ You don't write code, review or merge PRs, commit, or prompt other agents. You d
    The body says what to do, links the milestone in `milestones.md` and lists anything it waits on (`Waits on #N`). If the lead didn't say who it's for, leave out the `agent:` label and say so.
 2. **Email Tom when work is finished.** When the lead tells you an issue was merged or a milestone is done, send one email to **tomnguyen6766@gmail.com** with the Gmail connector. Never send to any other address.
    - Subject: `[Tomville] Done #N: <issue title>` or `[Tomville] Milestone M<n> done`
-   - Body, short and plain:
+   - Body, plain text:
      ```
      What: <one or two lines>
+     Who: <the agent that did the work>
      PR: <URL>   Issue: <URL>
-     Tested: <what the PR says was run>
      Next: <the next open issue or milestone, if the lead said>
+
+     Summary from <agent>:
+     <the worker's "Solved in #P" comment on the issue, copied in full:
+      What changed, Files, How I tested, Decisions, Not done / follow-ups>
      ```
-   Get the facts from `gh pr view P` and `gh issue view N`; don't guess. If the Gmail connector isn't available, don't find another way to send: report `BLOCKED`.
+   - For a milestone, send one email that lists every issue in it, each with its summary comment.
+   - Get the facts from `gh pr view P` and `gh issue view N --comments`; copy the summary comment as written, don't shorten or guess. If there is no summary comment yet, say so in the email and tell the lead.
+
+   If the Gmail connector isn't available, don't find another way to send: report `BLOCKED`.
 
 Finish every request with one line:
 
