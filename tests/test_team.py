@@ -424,3 +424,48 @@ def test_full_shutdown_includes_running_agent_with_gone_owned_pane(runtime):
     rows = team.down(project, settings=conf, agents=True, confirm=lambda rows: True)
     assert next(r for r in rows if r['agent'] == 'worker')['result'] == 'stopped (pane kept)'
     assert not any(a == ['herdr', 'pane', 'close', 'worker'] for a, kw in calls)
+
+
+def test_shutdown_waits_for_recorded_slow_exit(runtime, monkeypatch, capsys):
+    project, calls, agents, panes, tabs = runtime
+    conf, _ = shutdown_team(runtime)
+    conf.start_timeout = 12
+    elapsed = [0.0]
+    original = team.run_command
+    def run(args, project, **kw):
+        if args[1:3] == ['pane', 'process-info'] and args[-1] == 'worker':
+            fixture = 'herdr_codex_process.json' if elapsed[0] < 6 else 'herdr_shell_process.json'
+            return (FIXTURES / fixture).read_text()
+        return original(args, project, **kw)
+    monkeypatch.setattr(team, 'run_command', run)
+    monkeypatch.setattr(team.time, 'monotonic', lambda: elapsed[0])
+    monkeypatch.setattr(team.time, 'sleep', lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds))
+    rows = team.down(project, settings=conf, agents=True, confirm=lambda rows: True)
+    assert next(r for r in rows if r['agent'] == 'worker')['result'] == 'stopped'
+    assert 6 <= elapsed[0] < conf.start_timeout
+    assert 'waiting for worker to quit…' in capsys.readouterr().err
+    assert any(a == ['herdr', 'pane', 'close', 'worker'] for a, kw in calls)
+
+
+@pytest.mark.parametrize('timeout', [None, 42])
+def test_named_shutdown_uses_default_or_configured_timeout(runtime, monkeypatch, timeout):
+    project, *_ = runtime
+    conf, _ = shutdown_team(runtime)
+    conf.start_timeout = timeout or 120
+    waited = []
+    monkeypatch.setattr(team, 'wait_shell', lambda project, pane, seconds: waited.append(seconds))
+    rows = team.down(project, 'worker', settings=conf if timeout else None)
+    assert rows[0]['result'] == 'stopped'
+    assert waited == [timeout or 120]
+
+
+def test_shutdown_timeout_keeps_owned_pane(runtime, monkeypatch):
+    project, calls, *_ = runtime
+    conf, _ = shutdown_team(runtime)
+    def timeout(project, pane, seconds):
+        raise OSError(f'shell not ready in {pane}')
+    monkeypatch.setattr(team, 'wait_shell', timeout)
+    rows = team.down(project, 'worker', settings=conf)
+    assert rows[0]['result'].startswith('FAILED: shell not ready')
+    assert 'worker' in team.load_state(project)['agents']
+    assert not any(a == ['herdr', 'pane', 'close', 'worker'] for a, kw in calls)
