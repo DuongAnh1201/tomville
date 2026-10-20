@@ -5,14 +5,20 @@ import json
 import re
 
 from tomville.core import approvals, messages
+from tomville.core.questions import question_lines
 
 
-def markdown(text):
+def markdown(text, *, bold_lines=()):
     """Small safe Markdown subset for assistant text, emitting allowed HTML."""
     pattern = re.compile(r'```([^\n`]*)\n(.*?)```|`([^`\n]+)`|\*\*(.+?)\*\*|(?<!\*)\*([^*\n]+)\*|_([^_\n]+)_', re.S)
+    def plain(value, offset):
+        first = text.count('\n', 0, offset)
+        return '\n'.join('<b>' + escape(part) + '</b>' if part and first + i in bold_lines else escape(part)
+                         for i, part in enumerate(value.split('\n')))
+
     result, end = [], 0
     for match in pattern.finditer(text):
-        result.append(escape(text[end:match.start()]))
+        result.append(plain(text[end:match.start()], end))
         language, block, code, bold, italic, under = match.groups()
         if block is not None:
             language = language.strip()
@@ -22,9 +28,10 @@ def markdown(text):
             result.append('<code>' + escape(code) + '</code>')
         else:
             tag, value = ('b', bold) if bold is not None else ('i', italic if italic is not None else under)
-            result.append(f'<{tag}>' + escape(value) + f'</{tag}>')
+            inner = escape(value) if bold is not None else plain(value, match.start(5 if italic is not None else 6))
+            result.append(f'<{tag}>' + inner + f'</{tag}>')
         end = match.end()
-    return ''.join(result) + escape(text[end:])
+    return ''.join(result) + plain(text[end:], end)
 
 
 def details(data):
@@ -52,7 +59,8 @@ def buttons(data, rows):
 def issue(bridge, data):
     kind = data['kind']
     if kind == 'stop':
-        return [('💬 ' + markdown(data['payload']['last_assistant_message']), None)]
+        text = data['payload']['last_assistant_message']
+        return [('💬 ' + markdown(text, bold_lines=question_lines(text)), None)]
     if kind == 'permission-request':
         return [('🔐 ' + details(data), buttons(data, [[('✅ Allow once', 'allow'), ('❌ Deny', 'deny')]]))]
     if kind == 'permission-denied':
