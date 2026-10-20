@@ -1,0 +1,7 @@
+{
+  "provenance": "Synthetic offline scenarios based on official Claude Code hook contracts; not live captures. Checked against installed 2.1.305 input construction.",
+  "permission-request": {"session_id":"fixture-session","cwd":"/fixture/project","permission_mode":"default","hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"uv run pytest","description":"Run tests"}},
+  "permission-denied": {"session_id":"fixture-session","cwd":"/fixture/project","permission_mode":"auto","hook_event_name":"PermissionDenied","tool_use_id":"fixture-tool","tool_name":"Bash","tool_input":{"command":"gh pr merge 69 --squash"},"reason":"Auto mode could not evaluate this action and is blocking it for safety"},
+  "ask-user-question": {"session_id":"fixture-session","cwd":"/fixture/project","hook_event_name":"PreToolUse","tool_name":"AskUserQuestion","tool_use_id":"fixture-question","tool_input":{"questions":[{"question":"Which framework?","header":"Framework","options":[{"label":"React","description":"Component library"},{"label":"Vue","description":"Progressive framework"}],"multiSelect":false},{"question":"Which checks?","header":"Checks","options":[{"label":"Tests","description":"Run pytest"},{"label":"Lint","description":"Check formatting"}],"multiSelect":true}]}},
+  "stop": {"session_id":"fixture-session","cwd":"/fixture/project","hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"**Ready** to run `pytest` with *all checks*?"}
+}

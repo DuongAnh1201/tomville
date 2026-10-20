@@ -6,3 +6,4 @@ dist/
 .tomville/messages.jsonl
 .tomville/team.json
 .tomville/watch.json
+.tomville/approvals/

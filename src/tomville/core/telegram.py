@@ -1,12 +1,12 @@
 """Optional per-ville Telegram bridge. Bot API I/O is injectable for offline tests.
 
-No credentials live in the project. Unknown approval screens never get keys.
+No credentials live in the project. Permission decisions use lead-only hooks.
 """
 from __future__ import annotations
 
 import asyncio
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 from html import escape
 import fcntl
@@ -26,7 +26,7 @@ import urllib.request
 
 import tomli_w
 
-from tomville.core import messages, team
+from tomville.core import messages, team, telegram_approvals
 from tomville.core.models import Message
 from tomville.core.settings import load_settings, read_toml
 from tomville.core.ville import has_ville, update_ville
@@ -193,6 +193,8 @@ def trusted(message, chat_id=None):
 def setup(project, settings, ask, *, hidden=getpass.getpass, show=print, bot_factory=Bot, clock=time.monotonic):
     if not has_ville(project):
         raise ValueError('Run tmv new first')
+    if settings.team != 'lead':
+        raise ValueError(f"Sorry, Telegram isn't ready for the {settings.team} team yet; it works with the lead + workers team for now.")
     if settings.telegram['enabled']:
         raise ValueError('Telegram already enabled; turn it off before pairing again')
     show(f'In @BotFather use /newbot. Suggested name: {settings.name or project.name} ville; username: tomville_{re.sub("[^a-z0-9_]", "_", project.name.lower())}_bot')
@@ -243,39 +245,10 @@ def agent_commands(settings):
     return result
 
 
-@dataclass(frozen=True)
-class Question:
-    text: str
-    yes: str
-    no: str
-
-
-def parse_question(kind, screen):
-    """Conservative full permission panels; no generic yes/no guessing.
-
-    Retain the full panel, including cwd and options, for both display and equality.
-    Unfamiliar panels fall back to an in-pane answer.
-    """
-    text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', screen).strip()
-    if kind == 'claude' and ('Bash command' in text or 'Do you want to proceed?' in text):
-        if re.search(r'1\. Yes\s*\n', text) and re.search(r'3\. No(?:\s|$)', text) and 'Do you want to proceed?' in text:
-            return Question(text, '1', '3')
-    if kind == 'codex' and 'Would you like to run the following command?' in text:
-        if '1. Yes, proceed (y)' in text and '3. No, and tell Codex what to do differently (esc)' in text:
-            return Question(text, 'y', 'esc')
-    return None
-
-
-def read_question(project, agent):
-    raw = team.run_command(['herdr', 'pane', 'read', agent['pane_id'], '--source', 'visible'], project)
-    # pane read is text, unlike the machine envelope returned by other commands.
-    return parse_question(agent.get('agent'), raw)
-
-
 class Bridge:
     def __init__(self, project, settings, bot, config, *, clock=time.monotonic):
         self.project, self.settings, self.bot, self.config = project, settings, bot, config
-        self.clock, self.pending = clock, {}
+        self.clock, self.approval_clock = clock, time.time
         self.routes = agent_commands(settings)
 
     def log(self, target, text, via='telegram', sender='tom'):
@@ -326,6 +299,11 @@ class Bridge:
         return snapshot(self.reader, self.project, self.settings)
 
     def handle(self, update):
+        if self.settings.team != 'lead':
+            message = update.get('message') or dict(update.get('callback_query', {}).get('message', {}), **{'from': update.get('callback_query', {}).get('from', {})})
+            if trusted(message, self.config['chat_id']):
+                return self.say(escape(f"Sorry, we haven't done Telegram for the {self.settings.team} team yet."))
+            return
         if 'callback_query' in update:
             return self.callback(update['callback_query'])
         message = update.get('message', {})
@@ -334,6 +312,8 @@ class Bridge:
             return
         text = message.get('text', '').strip()
         if not text:
+            return
+        if telegram_approvals.reply(self, message):
             return
         command, _, body = text.partition(' ')
         command = command.removeprefix('/').split('@')[0].lower() if text.startswith('/') else ''
@@ -375,44 +355,16 @@ class Bridge:
         self.say('Sent to <b>' + escape(target) + '</b>')
 
     def blocked(self, agent):
-        name = agent['name']
-        live = next((a for a in team.herdr(self.project, 'agent', 'list')['agents'] if team.agent_name(a) == name and a['pane_id'] == agent['pane_id'] and a.get('agent_status') == 'blocked'), None) if self.settings.telegram['approvals'] else None
-        question = read_question(self.project, live) if live and live.get('terminal_id') and self.settings.telegram['approvals'] else None
-        if question is None:
-            return self.say('🤖 tomville: ' + escape(name) + ' is waiting; answer in its pane')
-        token = secrets.token_hex(12)
-        result = self.say('🤖 tomville: <b>' + escape(name) + ' asks:</b>\n' + escape(question.text), reply_markup={'inline_keyboard': [[
-            {'text': '✅ Approve', 'callback_data': token + ':yes'}, {'text': '❌ Decline', 'callback_data': token + ':no'}]]})
-        self.pending[token] = dict(agent=live, question=question, time=self.clock(), message_id=result['message_id'])
+        if self.settings.team == 'lead':
+            return self.say('🤖 tomville: ' + escape(agent['name']) + ' is waiting; answer in its pane')
 
     def callback(self, callback):
         message = callback.get('message', {})
-        # The callback's sender is the person; the attached message is from the bot.
         candidate = dict(message, **{'from': callback.get('from', {})})
         if not trusted(candidate, self.config['chat_id']):
             self.log('tomville', 'Ignored Telegram callback from another chat')
             return
-        token, _, choice = callback.get('data', '').partition(':')
-        pending = self.pending.get(token)
-        answer = 'expired'
-        if (pending and self.clock() - pending['time'] < 600 and choice in ('yes', 'no')
-                and not self.config.get('paused') and self.settings.telegram['approvals']):
-            answer = 'changed; nothing sent'
-            original = pending['agent']
-            live = next((a for a in team.herdr(self.project, 'agent', 'list')['agents']
-                         if a['pane_id'] == original['pane_id'] and team.agent_name(a) == team.agent_name(original)
-                         and a.get('terminal_id') == original.get('terminal_id') and a.get('agent') == original.get('agent')
-                         and a.get('agent_status') == 'blocked'), None)
-            if live and message.get('message_id') == pending['message_id'] and read_question(self.project, live) == pending['question']:
-                # Consume before delivering a key: a duplicate tap must never act twice.
-                self.pending.pop(token, None)
-                question = pending['question']
-                team.herdr(self.project, 'agent', 'send-keys', original['pane_id'], question.yes if choice == 'yes' else question.no)
-                answer = '✅ approved by Tom' if choice == 'yes' else '❌ declined'
-                self.log(team.agent_name(original), answer + '\n' + question.text, 'telegram-approval')
-                self.bot.call('editMessageText', chat_id=self.config['chat_id'], message_id=pending['message_id'], text=answer, reply_markup={'inline_keyboard': []})
-        self.pending.pop(token, None)
-        self.bot.call('answerCallbackQuery', callback_query_id=callback['id'], text=answer)
+        return telegram_approvals.callback(self, callback)
 
 
 def run(project, settings, *, bot_factory=Bot):
@@ -483,8 +435,7 @@ async def _run(bridge):
             async with guard:
                 if not refresh():
                     return
-                bridge.pending = {t: p for t, p in bridge.pending.items() if bridge.clock() - p['time'] < 600}
-                if bridge.config.get('paused'):
+                if bridge.config.get('paused') or bridge.settings.team != 'lead':
                     continue
                 try:
                     if isinstance(event, AgentStatusChanged) and event.new == 'blocked':
@@ -497,7 +448,18 @@ async def _run(bridge):
                 except OSError as exc:
                     bridge.error('notification failed', exc)
 
-    tasks = [asyncio.create_task(reader.run(queue.put_nowait)), asyncio.create_task(poll()), asyncio.create_task(notify())]
+    async def approvals_loop():
+        while True:
+            async with guard:
+                if not refresh():
+                    return
+                try:
+                    await asyncio.to_thread(telegram_approvals.scan, bridge)
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    bridge.error('hook request failed', exc)
+            await asyncio.sleep(1)
+
+    tasks = [asyncio.create_task(approvals_loop()), asyncio.create_task(reader.run(queue.put_nowait)), asyncio.create_task(poll()), asyncio.create_task(notify())]
     try:
         done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
@@ -515,6 +477,8 @@ async def _run(bridge):
 def reply(project, settings, text=None, *, diff=None, diff_file=None, bot_factory=Bot):
     if not settings.telegram['enabled']:
         raise ValueError('Telegram disabled; run tmv telegram setup')
+    if settings.team != 'lead':
+        raise ValueError(f"Sorry, we haven't done Telegram for the {settings.team} team yet.")
     sender = messages.sender_name()
     allowed = settings.telegram['from']
     if not sender or not (sender in allowed or sender == settings.lead and 'lead' in allowed):
