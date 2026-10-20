@@ -96,9 +96,12 @@ def sender_name() -> str | None:
     return next((a.name for a in agents if a.pane_id == pane), None)
 
 
-def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | None = None, *, sender: str | None = None, via: str = 'send') -> str:
-    """Prompt another agent through herdr, then log it. Nothing is logged if herdr refuses."""
-    args = ['herdr', 'agent', 'prompt', to, text]
+def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | None = None, *, sender: str | None = None, via: str = 'send', target: str | None = None) -> str:
+    """Prompt through herdr, then log the recipient name.
+
+    `target` optionally selects a resolved pane. Nothing is logged if herdr refuses.
+    """
+    args = ['herdr', 'agent', 'prompt', target or to, text]
     if wait:
         args.append('--wait')
     if timeout is not None:
