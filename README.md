@@ -115,7 +115,7 @@ Changes made through `tmv task` and `tmv send` move pets at once, because Tomvil
 
 - Only the lead prompts other agents, with `tmv send`.
 - **Workers never use herdr**, not even to read: no `herdr` commands, no `tmv up`, `tmv down` or `tmv send`, no creating or closing panes, tabs, workspaces or worktrees. Only the lead does, after the user approves. A Check that needs real herdr goes in the PR for the lead to run.
-- An optional **secretary** (Claude Haiku) writes no code. When the lead asks, it files GitHub issues and emails the user when an issue is merged or a milestone is done, with the worker's full summary comment from the issue. It emails only the one address in its `[agents.secretary]` table.
+- An optional **secretary** (Claude Haiku) writes no code. When the lead asks, it files GitHub issues and emails the user at each step (PR opened for review, PR merged, worker blocked, milestone done), always with what changed: the changes in plain words, each file with its added and removed lines, and the worker's full summary comment. It emails only the one address in its `[agents.secretary]` table.
 
 ### 2. Pipeline
 
