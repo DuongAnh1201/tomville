@@ -488,3 +488,41 @@ def test_telegram_tab_up_repeat_and_shutdown(runtime):
     rows = team.down(project, settings=conf, agents=True, confirm=lambda rows: True)
     assert any(r['agent'] == 'telegram' and r['result'] == 'stopped' for r in rows)
     assert team.load_state(project)['telegram'] is None
+
+
+def test_up_names_unnamed_adopted_lead_and_records_identity(runtime, monkeypatch):
+    project, calls, agents, panes, tabs = runtime
+    caller = recorded('herdr_named_agents.json')['result']['agents'][0]
+    assert not caller.get('name')
+    agents.append(caller)
+    monkeypatch.setenv('HERDR_PANE_ID', caller['pane_id'])
+    conf = settings(boss=AgentSpec('boss', 'claude', place='here'))
+    rows = team.up(project, conf)
+    assert rows[0]['result'] == 'lead: boss'
+    assert any(a == ['herdr', 'agent', 'rename', caller['pane_id'], 'boss'] for a, kw in calls)
+    state = team.load_state(project)
+    assert state['lead_pane'] == caller['pane_id']
+    assert state['lead_terminal'] == caller['terminal_id']
+    assert state['lead_kind'] == 'claude'
+    assert not any(a[1:3] == ['agent', 'start'] for a, kw in calls)
+    # Once herdr has the name, repeated startup must not rename it again.
+    caller['name'] = 'boss'
+    calls.clear()
+    team.up(project, conf)
+    assert not any(a[1:3] == ['agent', 'rename'] for a, kw in calls)
+
+
+def test_up_reports_adopted_lead_rename_failure(runtime, monkeypatch):
+    project, calls, agents, panes, tabs = runtime
+    caller = recorded('herdr_named_agents.json')['result']['agents'][0]
+    agents.append(caller)
+    monkeypatch.setenv('HERDR_PANE_ID', caller['pane_id'])
+    original = team.run_command
+    def run(args, project, **kw):
+        if args[1:3] == ['agent', 'rename']:
+            raise OSError('agent name already in use')
+        return original(args, project, **kw)
+    monkeypatch.setattr(team, 'run_command', run)
+    with pytest.raises(OSError, match='name already in use'):
+        team.up(project, settings(boss=AgentSpec('boss', 'claude', place='here')))
+    assert not (project / team.STATE).exists()

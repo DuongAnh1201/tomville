@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from tomville.core import telegram as tg
+from tomville.core.messages import send as send_message
 from tomville.core.settings import settings_from_data, load_settings
 from tomville.core.ville import write_ville
 
@@ -35,7 +36,9 @@ def bridge(ville, monkeypatch):
     bot.send.return_value = {'message_id': 70}
     b = tg.Bridge(project, settings, bot, config, clock=lambda: 100)
     monkeypatch.setattr(tg.messages, 'send', Mock())
-    monkeypatch.setattr(tg.team, 'herdr', Mock(side_effect=AssertionError('unexpected herdr')))
+    agents = [{'name': name, 'agent': spec.kind, 'pane_id': 'pane-' + name}
+              for name, spec in settings.agents.items()]
+    monkeypatch.setattr(tg.team, 'herdr', Mock(return_value={'agents': agents}))
     return b
 
 
@@ -103,7 +106,7 @@ def message(text):
 
 def test_routing_and_rejections(bridge):
     bridge.handle(message('hello lead'))
-    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello lead', sender='tom', via='telegram')
+    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello lead', sender='tom', via='telegram', target='pane-claude')
     bridge.handle(message('/codex_1 test'))
     assert tg.messages.send.call_args.args[1:3] == ('codex-1', 'test')
     bridge.handle(message('/status_agent test'))
@@ -344,7 +347,7 @@ def test_runtime_persists_offset_before_forwarding(bridge, monkeypatch):
     assert delivered == [11]
 
 
-def test_runtime_backoff_caps_at_sixty(bridge, monkeypatch):
+def test_runtime_backoff_caps_at_sixty(bridge, monkeypatch, capsys):
     import asyncio
     from tomville.core import events
     delays = []
@@ -368,3 +371,199 @@ def test_runtime_backoff_caps_at_sixty(bridge, monkeypatch):
     with pytest.raises(Finished):
         asyncio.run(tg._run(bridge))
     assert delays == [2, 4, 8, 16, 32, 60, 60]
+    assert capsys.readouterr().err.count('Telegram: poll failed: fixture connection failure') == 7
+    records = [json.loads(line) for line in (bridge.project / '.tomville/messages.jsonl').read_text().splitlines()]
+    assert len(records) == 7 and all(r['via'] == 'telegram-error' for r in records)
+
+
+def test_routes_to_recorded_unnamed_lead_pane(bridge, monkeypatch):
+    agents = json.loads((FIXTURES / 'herdr_named_agents.json').read_text())['result']['agents']
+    lead = agents[0]
+    assert not lead.get('name')
+    tg.team.save_state(bridge.project, {'agents': {}, 'lead_pane': lead['pane_id']})
+    monkeypatch.setattr(tg.team, 'herdr', Mock(return_value={'agents': agents}))
+    bridge.handle(message('hello unnamed lead'))
+    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello unnamed lead', sender='tom', via='telegram', target=lead['pane_id'])
+    assert 'Sent to <b>claude</b>' in bridge.bot.send.call_args.args[1]
+
+
+def test_agent_command_resolves_live_pane_and_keeps_log_name(bridge, monkeypatch):
+    import subprocess
+    agents = json.loads((FIXTURES / 'herdr_named_agents.json').read_text())['result']['agents']
+    worker = next(a for a in agents if a.get('name') == 'codex1')
+    bridge.routes['codex_1'] = 'codex1'
+    monkeypatch.setattr(tg.team, 'herdr', Mock(return_value={'agents': agents}))
+    # Use the actual send boundary with a fake subprocess, checking both command and log.
+    monkeypatch.setattr(tg.messages, 'send', send_message)
+    run = Mock(return_value=subprocess.CompletedProcess([], 0, 'sent', ''))
+    monkeypatch.setattr(tg.messages.subprocess, 'run', run)
+    bridge.handle(message('/codex_1 run tests'))
+    assert run.call_args.args[0] == ['herdr', 'agent', 'prompt', worker['pane_id'], 'run tests']
+    log = json.loads((bridge.project / '.tomville/messages.jsonl').read_text())
+    assert (log['from'], log['to'], log['via']) == ('tom', 'codex1', 'telegram')
+
+
+@pytest.mark.parametrize('failure', ['missing', 'ambiguous', 'renamed', 'terminal', 'kind', 'send', 'send-json'])
+def test_failed_delivery_is_explained_and_logged(bridge, monkeypatch, capsys, failure):
+    agent = dict(name='claude', agent='claude', pane_id='lead', terminal_id='term')
+    agents = [agent]
+    if failure in ('renamed', 'terminal', 'kind'):
+        tg.team.save_state(bridge.project, {'agents': {}, 'lead_pane': 'lead', 'lead_terminal': 'term', 'lead_kind': 'claude'})
+        agent[{'renamed': 'name', 'terminal': 'terminal_id', 'kind': 'agent'}[failure]] = 'replacement'
+    elif failure == 'missing':
+        # An unnamed kind is deliberately not treated as a valid name.
+        agents = [dict(agent, name=None)]
+    elif failure == 'ambiguous':
+        agents.append(dict(agent, pane_id='other'))
+    else:
+        error = 'agent not found' if failure == 'send' else json.dumps({'id': 'cli:agent:prompt', 'error': {'code': 'not_found', 'message': 'agent target claude not found'}})
+        tg.messages.send.side_effect = OSError(error)
+    monkeypatch.setattr(tg.team, 'herdr', Mock(return_value={'agents': agents}))
+    bridge.handle(message('do work'))
+    reply = bridge.bot.send.call_args.args[1]
+    assert "couldn&#x27;t reach claude" in reply
+    if failure not in ('send', 'send-json'):
+        tg.messages.send.assert_not_called()
+    if failure == 'send-json':
+        assert 'agent target claude not found' in reply and 'cli:agent:prompt' not in reply
+    record = json.loads((bridge.project / '.tomville/messages.jsonl').read_text())
+    assert record['to'] == 'claude' and record['via'] == 'telegram-error'
+    assert "couldn't reach claude" in record['text']
+    output = capsys.readouterr().err
+    assert 'Telegram:' in output and 'T' in output[:20] and '+00:00' in output
+
+
+def test_error_reply_failure_is_also_logged_with_token_redacted(bridge, monkeypatch, capsys):
+    bridge.bot.token = '123:fake-private'
+    monkeypatch.setattr(tg.team, 'herdr', Mock(side_effect=OSError('agent not found 123:fake-private')))
+    bridge.bot.send.side_effect = OSError('https://api.telegram.org/bot123:fake-private/sendMessage timed out')
+    bridge.handle(message('do work'))
+    records = [json.loads(line) for line in (bridge.project / '.tomville/messages.jsonl').read_text().splitlines()]
+    assert len(records) == 2
+    assert 'failure reply' in records[-1]['text']
+    assert '123:fake-private' not in json.dumps(records) + capsys.readouterr().err
+
+
+def test_http_error_preserves_short_reason_without_token():
+    from urllib.error import HTTPError
+    error = HTTPError('https://api.telegram.org/bot123:fake/sendMessage', 403, 'Forbidden', {}, io.BytesIO(json.dumps({'ok': False, 'error_code': 403, 'description': 'Forbidden: bot blocked 123:fake'}).encode()))
+    bot = tg.Bot('123:fake', Mock(side_effect=error))
+    with pytest.raises(OSError, match='403.*Forbidden: bot blocked') as exc:
+        bot.call('sendMessage')
+    assert '123:fake' not in str(exc.value)
+
+
+def test_ipv6_stall_falls_back_and_future_calls_prefer_ipv4(monkeypatch):
+    import socket
+    import ssl
+    addresses = [(socket.AF_INET6, socket.SOCK_STREAM, 6, '', ('::1', 443, 0, 0)),
+                 (socket.AF_INET6, socket.SOCK_STREAM, 6, '', ('::2', 443, 0, 0)),
+                 (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('127.0.0.1', 443))]
+    monkeypatch.setattr(tg.socket, 'getaddrinfo', lambda *args, **kw: addresses.copy())
+    sockets = []
+    class Socket:
+        def __init__(self, family, *args):
+            self.family, self.timeouts, self.closed = family, [], False
+            sockets.append(self)
+        def settimeout(self, timeout):
+            self.timeouts.append(timeout)
+        def connect(self, endpoint):
+            if self.family == socket.AF_INET6:
+                raise TimeoutError('IPv6 stalled')
+        def close(self):
+            self.closed = True
+    monkeypatch.setattr(tg.socket, 'socket', Socket)
+    handler = tg.TelegramHTTPSHandler()
+    def do_open(factory, request, **kwargs):
+        connection = factory('api.telegram.org', timeout=request.timeout, **kwargs)
+        assert connection.host == 'api.telegram.org'
+        assert connection._context.check_hostname and connection._context.verify_mode == ssl.CERT_REQUIRED
+        connection._create_connection((connection.host, connection.port), connection.timeout, connection.source_address)
+        return io.BytesIO(json.dumps(API['sendMessage']).encode())
+    monkeypatch.setattr(handler, 'do_open', do_open)
+    def opener(request, timeout):
+        request.timeout = timeout
+        return handler.https_open(request)
+    bot = tg.Bot('123:fake', opener)
+    bot.call('sendMessage', chat_id=42, text='one')
+    bot.call('sendMessage', chat_id=42, text='two')
+    assert [sock.family for sock in sockets] == [socket.AF_INET6, socket.AF_INET, socket.AF_INET]
+    assert sockets[0].timeouts == [1] and sockets[0].closed
+    assert sockets[1].timeouts == [40, 40]  # preserve long-poll read timeout
+    assert handler.prefer_ipv4
+
+
+def test_default_bot_uses_its_own_fallback_opener(monkeypatch):
+    opener = Mock()
+    build = Mock(return_value=opener)
+    monkeypatch.setattr(tg.urllib.request, 'build_opener', build)
+    bot = tg.Bot('123:fake')
+    assert isinstance(build.call_args.args[0], tg.TelegramHTTPSHandler)
+    assert bot.opener == opener.open
+
+
+def test_unnamed_worker_resolves_by_recorded_terminal(bridge, monkeypatch):
+    agents = json.loads((FIXTURES / 'herdr_named_agents.json').read_text())['result']['agents']
+    worker = next(a for a in agents if a.get('name') == 'codex1')
+    worker.pop('name')
+    tg.team.save_state(bridge.project, {'agents': {'codex-1': {'pane': worker['pane_id'], 'terminal': worker['terminal_id'], 'kind': 'codex'}}})
+    monkeypatch.setattr(tg.team, 'herdr', Mock(return_value={'agents': agents}))
+    bridge.handle(message('/codex_1 hello'))
+    assert tg.messages.send.call_args.kwargs['target'] == worker['pane_id']
+
+
+def test_notification_error_is_timestamped_and_logged(bridge, monkeypatch, capsys):
+    import asyncio
+    from tomville.core import events
+    from tomville.core.models import Card, CardChanged, Column
+    async def run():
+        reported = asyncio.Event()
+        class Reader:
+            agents, cards = {}, {}
+            def __init__(self, *args):
+                pass
+            async def run(self, emit):
+                emit(CardChanged(Card('#1', 'Review', Column.REVIEW), Column.DOING))
+                await asyncio.wait_for(reported.wait(), 2)
+        original = bridge.error
+        def report(*args, **kwargs):
+            result = original(*args, **kwargs)
+            reported.set()
+            return result
+        monkeypatch.setattr(bridge, 'error', report)
+        monkeypatch.setattr(events, 'EventReader', Reader)
+        bridge.bot.call.side_effect = lambda method, **kw: [] if method == 'getUpdates' else True
+        bridge.bot.send.side_effect = OSError('network unreachable')
+        await asyncio.wait_for(tg._run(bridge), 3)
+    asyncio.run(asyncio.wait_for(run(), 5))
+    assert 'notification failed: network unreachable' in capsys.readouterr().err
+    assert 'notification failed: network unreachable' in (bridge.project / '.tomville/messages.jsonl').read_text()
+
+
+def test_healthy_ipv6_and_ipv6_only_remain_usable(monkeypatch):
+    import socket
+    endpoint = ('::1', 443, 0, 0)
+    monkeypatch.setattr(tg.socket, 'getaddrinfo', lambda *a, **kw: [(socket.AF_INET6, socket.SOCK_STREAM, 6, '', endpoint)])
+    sock = Mock()
+    monkeypatch.setattr(tg.socket, 'socket', Mock(return_value=sock))
+    handler = tg.TelegramHTTPSHandler()
+    assert handler.connect(('api.telegram.org', 443), 40) == sock
+    sock.connect.assert_called_once_with(endpoint)
+    assert sock.settimeout.call_args_list[0].args == (1,)
+    assert sock.settimeout.call_args_list[1].args == (40,)
+    assert not handler.prefer_ipv4
+    sock.close.assert_not_called()
+
+
+def test_connect_closes_all_failed_sockets(monkeypatch):
+    import socket
+    addresses = [(socket.AF_INET6, socket.SOCK_STREAM, 6, '', ('::1', 443, 0, 0)),
+                 (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('127.0.0.1', 443))]
+    monkeypatch.setattr(tg.socket, 'getaddrinfo', lambda *a, **kw: addresses.copy())
+    sockets = [Mock(), Mock()]
+    sockets[0].connect.side_effect = TimeoutError('IPv6 timed out')
+    sockets[1].connect.side_effect = OSError('IPv4 unreachable')
+    monkeypatch.setattr(tg.socket, 'socket', Mock(side_effect=sockets))
+    with pytest.raises(OSError, match='IPv4 unreachable'):
+        tg.TelegramHTTPSHandler().connect(('api.telegram.org', 443), 40)
+    assert all(sock.close.call_count == 1 for sock in sockets)
