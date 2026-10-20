@@ -9,9 +9,11 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import time
 
 from tomville.core.commands import run_command
+from tomville.core.settings import DEFAULT_START_TIMEOUT
 
 STATE = Path('.tomville/team.json')
 ERRORS = (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError)
@@ -346,7 +348,8 @@ def down(project, name=None, *, settings=None, agents=False, confirm=None):
                             herdr(project, 'agent', 'prompt', pane, '/quit')
                         else:
                             herdr(project, 'agent', 'send-keys', pane, 'ctrl+c')
-                        wait_shell(project, pane, 5)
+                        print(f'waiting for {target} to quit…', file=sys.stderr, flush=True)
+                        wait_shell(project, pane, settings.start_timeout if settings else DEFAULT_START_TIMEOUT)
                     elif not owned:
                         raise OSError('agent identity is unavailable; kept for inspection')
                     if owned:
