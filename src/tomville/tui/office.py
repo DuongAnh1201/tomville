@@ -20,6 +20,7 @@ STATUS_STYLE = {
     Status.UNKNOWN: "bold magenta",
 }
 BUBBLE_STYLE = "black on white"
+CARD_COLORS = ("cyan", "magenta", "yellow", "green", "blue", "red")  # by the agent's place in the team
 PARCEL_STYLE = "bold white on blue"
 
 
@@ -76,6 +77,10 @@ class OfficeView(Widget):
         for x, y, label in self.world.parcel_cells():
             text = f"[{label}]"
             put(x - cell_len(text) // 2, y, text, PARCEL_STYLE)
+        team = list(self.world.pets)
+        for x, y, text, agent in self.world.board_cells():
+            color = CARD_COLORS[team.index(agent) % len(CARD_COLORS)] if agent in team else "white"
+            put(x, y, text, f"bold {color}" if agent else "dim")
         apps = self.world.appearances()
         for a in apps:
             style = STATUS_STYLE[a.status]

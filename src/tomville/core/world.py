@@ -42,6 +42,7 @@ TILE = 2  # cells per sprite, as in sprites.py
 BUBBLE_SECONDS = 3.0
 SLEEP_AFTER = 60.0  # seconds idle before a pet sleeps
 BLINK_HZ = 2.0
+BOARD_COLUMN_W = 7  # the wall board headings "Todo   Doing  Review" are 7 cells apart
 BELT_SPEED = 6.0  # cells per second for cards riding the pipeline belt
 MAX_BUBBLE = 28  # characters
 LABEL_MARK = 5  # cells kept free after a name for its mark (" #123", " ❗", " z z")
@@ -263,6 +264,29 @@ class World:
             if card.agent == name and card.column is Column.DOING:
                 return card.id
         return None
+
+    def board_cells(self) -> list[tuple[int, int, str, str | None]]:
+        """(x, y, text, agent) for the cards on the wall board, under Todo / Doing / Review.
+
+        Done cards stay off the wall. A column with more cards than rows shows the
+        ones that fit and `+N` in its last row.
+        """
+        zone = self.office.zones.get("board_cards") if self.office else None
+        if zone is None or zone.h < 1:
+            return []
+        cells = []
+        for i, column in enumerate((Column.TODO, Column.DOING, Column.REVIEW)):
+            x = zone.x + 1 + i * BOARD_COLUMN_W
+            width = min(BOARD_COLUMN_W - 1, zone.x + zone.w - x)
+            cards = sorted((c for c in self.cards.values() if c.column is column), key=lambda c: (len(c.id), c.id))
+            if width < 1 or not cards:
+                continue
+            shown = cards if len(cards) <= zone.h else cards[: zone.h - 1]
+            for row, card in enumerate(shown):
+                cells.append((x, zone.y + row, card.id[:width], card.agent))
+            if len(shown) < len(cards):
+                cells.append((x, zone.y + len(shown), f"+{len(cards) - len(shown)}"[:width], None))
+        return cells
 
     def appearances(self) -> list[Appearance]:
         return self._place_labels([self.appearance(p) for p in self.pets.values()])
