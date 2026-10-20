@@ -69,9 +69,12 @@ def build_parser():
     telegram = commands.add_parser('telegram', help='optional phone chat for this ville')
     common_options(telegram)
     telegram.add_argument('telegram_command', choices=('setup', 'run', 'status', 'pause', 'resume', 'off'))
-    reply = commands.add_parser('reply', help='reply to the ville Telegram chat (HTML bold/italic)')
+    reply = commands.add_parser('reply', help='reply with Telegram HTML or a formatted PR diff')
     common_options(reply)
-    reply.add_argument('text')
+    reply_source = reply.add_mutually_exclusive_group(required=True)
+    reply_source.add_argument('text', nargs='?', help='HTML: b, i, code or pre/code with class=language-X')
+    reply_source.add_argument('--diff', type=positive_issue, metavar='PR', help='send a GitHub PR diff with per-file headers')
+    reply_source.add_argument('--diff-file', type=Path, metavar='FILE', help='send a saved git diff')
     hook = commands.add_parser('hook', help=argparse.SUPPRESS)
     hook.add_argument('name', choices=('claude-pre-tool-use',))
     new = commands.add_parser('new', help='create a new ville for this project')
@@ -329,7 +332,10 @@ def main(argv=None):
             if args.command == 'reply':
                 from tomville.core.messages import repo_root
                 root = repo_root(project)
-                telegram.reply(root, load_settings(root, config=args.config), args.text)
+                diff_file = args.diff_file.expanduser() if args.diff_file is not None else None
+                if diff_file is not None and not diff_file.is_absolute():
+                    diff_file = project / diff_file
+                telegram.reply(root, load_settings(root, config=args.config), args.text, diff=args.diff, diff_file=diff_file)
                 return 0
             action = args.telegram_command
             if action == 'setup':
