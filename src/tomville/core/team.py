@@ -187,10 +187,14 @@ def up(project, settings):
     state = load_state(project)
     agents = herdr(project, 'agent', 'list')['agents']
     caller = next((a for a in agents if a['pane_id'] == os.environ.get('HERDR_PANE_ID')), None)
-    lead = agent_name(caller) if caller else settings.lead
+    lead = (caller.get('name') or settings.lead) if caller else settings.lead
     lead_pane = caller['pane_id'] if caller else None
     lead_spec = state.get('lead_spec', settings.lead)
     if caller:
+        if not caller.get('name'):
+            herdr(project, 'agent', 'rename', lead_pane, lead)
+        state['lead_terminal'] = caller.get('terminal_id')
+        state['lead_kind'] = caller.get('agent') or (caller.get('agent_session') or {}).get('agent')
         state['lead_spec'] = lead_spec
         state['lead_pane'] = lead_pane
         save_state(project, state)
@@ -216,6 +220,8 @@ def up(project, settings):
                     raise OSError('blocked at startup' if live.get('agent_status') == 'blocked' else 'agent not detected')
                 if name in (lead, lead_spec):
                     lead_pane = live['pane_id']
+                    state.update(lead_pane=lead_pane, lead_terminal=live.get('terminal_id'), lead_kind=live.get('agent'))
+                    save_state(project, state)
                 owned = state['agents'].get(name)
                 if owned and owned['pane'] == live['pane_id'] and not owned.get('prompt_sent'):
                     run_command(['tmv', '-C', str(project), 'send', name, first_prompt(spec, lead, settings.agents, project)], project)
@@ -246,6 +252,8 @@ def up(project, settings):
                 raise OSError('agent not detected or blocked at startup')
             if name == lead:
                 lead_pane = pane
+                state.update(lead_pane=pane, lead_terminal=detected.get('terminal_id'), lead_kind=detected.get('agent'))
+                save_state(project, state)
             run_command(['tmv', '-C', str(project), 'send', name, first_prompt(spec, lead, settings.agents, project)], project)
             owned['prompt_sent'] = True
             save_state(project, state)
