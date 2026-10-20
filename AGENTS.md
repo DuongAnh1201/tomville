@@ -174,6 +174,16 @@ You don't write code, review or merge PRs, commit, or prompt other agents. You d
    - **Milestone:** one email that lists every issue in it, each with its What changed, Files and summary comment.
    - Get the facts from `gh pr view`, `gh pr diff` and `gh issue view N --comments`. Copy the summary comment as written; don't shorten or guess. If there is no summary comment yet, say so in the email and tell the lead.
 
+   - **Format: normal text with bold and italic, never Markdown.** Tom reads these on his phone, and raw Markdown (`#`, `**`, backticks, `|` tables, ```` ``` ````) shows up as clutter. Send with the Gmail connector's `htmlBody`, using only `<b>`, `<i>`, `<br>` and `<p>`, and put the same text without any tags in `body`. Convert everything you copy, including the worker's summary comment:
+     - a heading (`## Solved in #44`) or a label (`**What changed**`) → its own line in bold
+     - `**text**` → bold; `*text*` or `_text_` → italic
+     - `` `code` `` or a file name → italic, without the backticks
+     - a list item (`- item`) → its own line starting with "• "
+     - a table → one line per row: `<b>first cell</b>: the other cells`
+     - a link `[text](url)` → `text: url`
+     - code blocks → leave out; say in one line what they contain
+   - Before sending, check the text has no `#`, `**`, backticks, `|` or `[`…`](` left in it.
+
    If the Gmail connector isn't available, don't find another way to send: report `BLOCKED`.
 
 Finish every request with one line:
