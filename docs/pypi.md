@@ -14,6 +14,18 @@ Tomville is built on top of [herdr](https://herdr.dev), the terminal workspace m
 ▓  LOUNGE           REVIEW                  DOOR  ▓
 ```
 
+## 📱 Talk to your team from your phone
+
+New in 0.2.0, and optional: connect a Telegram chat to your ville (`tmv telegram setup`, or answer yes to the last question of `tmv new`). Each ville gets its own bot, so each project is its own chat.
+
+- Plain text goes to the lead; `/<agent>` messages an agent directly; `/status`, `/board`, `/pending` and `/pause` answer from the bot.
+- Pings when an agent is blocked, or a card is ready for review or done.
+- The lead's permission questions and choices come to your phone as buttons (allow once or deny; 10 minutes without an answer counts as no).
+- Code and PR diffs are shown IDE-style, per file, with `tmv reply --diff PR`.
+- Safe by design: only your paired private chat is answered, the token is kept outside the project (mode 600), the bot has no shell, and no server or open port is needed. Works with the lead + workers team only for now.
+
+Details: [Phone (Telegram)](https://github.com/DuongAnh1201/tomville#phone-telegram) in the README.
+
 ## Requirements
 
 - Linux or macOS (also runs in Termux on Android, inside a PRoot Ubuntu)
@@ -68,6 +80,9 @@ tmv --demo
 | `tmv send AGENT "text"` | Prompt another agent and log who sent it |
 | `tmv task new/take/move/list` | Manage GitHub task cards |
 | `tmv setup` | Redo the emoji test, board labels, agent rules or the Claude hook |
+| `tmv telegram setup/run/status/pause/resume/off` | Optional phone chat for this ville |
+| `tmv reply TEXT` / `--diff PR` | Send a reply, or a PR diff, to your Telegram chat |
+| `tmv watch` | Wait for a GitHub issue or PR change, then exit (for the lead) |
 | `tmv config get/set` | Read and change settings |
 
 In the office: `f` frame rate, `s` sprite style (emoji or ASCII), `g` board check interval, `t` sidebar, `?` help, `q` quit.
