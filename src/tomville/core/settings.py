@@ -66,6 +66,25 @@ def agent_specs(table):
     return {name: AgentSpec(name=name, **spec) for name, spec in table.items()}
 
 
+def telegram_settings(table):
+    known = {'enabled', 'bot', 'id', 'approvals', 'from'}
+    if not isinstance(table, dict) or set(table) - known:
+        raise ValueError('telegram allows only enabled, bot, id, approvals and from; no secrets')
+    for key in ('enabled', 'approvals'):
+        if not isinstance(table.get(key, False), bool):
+            raise ValueError(f'telegram.{key} must be a boolean')
+    for key in ('bot', 'id'):
+        if not isinstance(table.get(key, ''), str):
+            raise ValueError(f'telegram.{key} must be text')
+    import re
+    if table.get('id') and not re.fullmatch(r'[a-zA-Z0-9_-]{8,64}', table['id']):
+        raise ValueError('telegram.id must be an opaque ville ID')
+    allowed = table.get('from', ['secretary', 'lead'])
+    if not isinstance(allowed, list) or any(not isinstance(a, str) for a in allowed):
+        raise ValueError('telegram.from must be an array of agent names')
+    return dict(enabled=False, bot='', id='', approvals=False) | table | {'from': allowed}
+
+
 @dataclass
 class OfficeSettings(ReaderSettings):
     name: str = ''
@@ -80,12 +99,14 @@ class OfficeSettings(ReaderSettings):
     demo: bool = False
     still: bool = False
     agents: dict = None  # name -> AgentSpec, in ville order
+    telegram: dict = None
     start_timeout: float = DEFAULT_START_TIMEOUT
 
     def __post_init__(self):
         super().__post_init__()
         self.pets = self.pets or {}
         self.agents = self.agents or {}
+        self.telegram = telegram_settings(self.telegram or {})
         if isinstance(self.start_timeout, bool) or not 0 < self.start_timeout <= 300:
             raise ValueError('start_timeout must be between 0 and 300 seconds')
         for key, choices in {'fps': (5, 10, 15, 30), 'style': ('emoji', 'ascii', 'blocks'), 'theme': ('night', 'game-boy', 'green-screen'), 'layout': ('auto', 'landscape', 'portrait'), 'team': ('lead', 'pipeline')}.items():
@@ -120,7 +141,7 @@ def merge_settings(base, updates):
 
 
 def settings_from_data(data):
-    for key in ('board', 'team', 'pets', 'agents'):
+    for key in ('board', 'team', 'pets', 'agents', 'telegram'):
         if not isinstance(data.get(key, {}), dict):
             raise ValueError(f'{key} must be a TOML table')
     board = data.get('board', {})
@@ -140,13 +161,17 @@ def settings_from_data(data):
         layout=data.get('layout', 'auto'), team=team.get('shape', 'lead'), lead=team.get('lead'),
         stages=tuple(team.get('stages', [])), pets=data.get('pets', {}),
         demo=data.get('demo', False), still=data.get('still', False),
-        agents=agent_specs(data.get('agents', {})), start_timeout=float(data.get('start_timeout', DEFAULT_START_TIMEOUT)),
+        telegram=data.get('telegram', {}), agents=agent_specs(data.get('agents', {})), start_timeout=float(data.get('start_timeout', DEFAULT_START_TIMEOUT)),
     )
 
 
 def load_settings(project, *, config=None, **overrides):
     # Project settings are the ville's defaults; env and CLI always win.
-    data = merge_settings(read_toml(config_path(config)), read_toml(project / '.tomville/ville.toml'))
+    user_data = read_toml(config_path(config))
+    telegram_settings(user_data.get('telegram', {}))  # reject secrets even in a masked table
+    project_data = read_toml(project / '.tomville/ville.toml')
+    data = merge_settings(user_data, project_data)
+    data['telegram'] = project_data.get('telegram', {})  # links belong to this ville only
     paths = {'source': 'board.source', 'repo': 'board.repo', 'check_seconds': 'board.check_seconds', 'poll_seconds': 'poll_seconds', 'team': 'team.shape', 'lead': 'team.lead'}
     env_names = {'source': 'BOARD', 'check_seconds': 'BOARD_CHECK', 'poll_seconds': 'POLL'}
     for key in ('source', 'repo', 'check_seconds', 'poll_seconds', 'fps', 'style', 'theme', 'layout', 'team', 'lead', 'demo', 'still'):

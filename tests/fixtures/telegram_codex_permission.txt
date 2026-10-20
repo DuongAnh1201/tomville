@@ -1,0 +1,6 @@
+Would you like to run the following command?
+  $ uv run pytest -q
+  in /root/project
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with uv
+  3. No, and tell Codex what to do differently (esc)

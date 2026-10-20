@@ -254,28 +254,33 @@ def up(project, settings):
             pane = pane or state['agents'].get(name, {}).get('pane')
             diagnostic = detection(project, spec, pane, str(exc))
             rows.append(dict(agent=name, place=spec.place, pane=pane, result='FAILED', **diagnostic))
+    rows.append(open_app_tab(project, settings, state, 'office', ['tmv', '-C', str(project)]))
+    if settings.telegram['enabled']:
+        rows.append(open_app_tab(project, settings, state, 'telegram', ['tmv', '-C', str(project), 'telegram', 'run']))
+    return rows
+
+
+def open_app_tab(project, settings, state, label, command):
     try:
         tabs = herdr(project, 'tab', 'list')['tabs']
-        office = state.get('office')
         panes = herdr(project, 'pane', 'list')['panes']
-        external = next((p for p in panes if p.get('cwd') == str(project) and any(t['tab_id'] == p.get('tab_id') and t.get('label') == 'office' for t in tabs)), None)
-        if not office and external:
-            rows.append(dict(agent='office', place='tab', pane=external['pane_id'], result='already open'))
-            return rows
-        if not office or not any(p['pane_id'] == office['pane'] and p.get('terminal_id') == office['terminal'] for p in panes):
-            result = herdr(project, 'tab', 'create', '--cwd', str(project), '--label', 'office', '--no-focus')
+        record = state.get(label)
+        external = next((p for p in panes if p.get('cwd') == str(project) and any(t['tab_id'] == p.get('tab_id') and t.get('label') == label for t in tabs)), None)
+        if not record and external:
+            return dict(agent=label, place='tab', pane=external['pane_id'], result='already open')
+        if not record or not any(p['pane_id'] == record['pane'] and p.get('terminal_id') == record['terminal'] for p in panes):
+            result = herdr(project, 'tab', 'create', '--cwd', str(project), '--label', label, '--no-focus')
             pane = result['root_pane']
-            state['office'] = {'tab': result['tab']['tab_id'], 'pane': pane['pane_id'], 'terminal': pane.get('terminal_id')}
+            record = state[label] = {'tab': result['tab']['tab_id'], 'pane': pane['pane_id'], 'terminal': pane.get('terminal_id')}
             save_state(project, state)
-        if not state['office'].get('launched'):
-            wait_shell(project, state['office']['pane'], settings.start_timeout)
-            herdr(project, 'pane', 'run', state['office']['pane'], shlex.join(['tmv', '-C', str(project)]))
-            state['office']['launched'] = True
+        if not record.get('launched'):
+            wait_shell(project, record['pane'], settings.start_timeout)
+            herdr(project, 'pane', 'run', record['pane'], shlex.join(command))
+            record['launched'] = True
             save_state(project, state)
-        rows.append(dict(agent='office', place='tab', pane=state['office']['pane'], result='open'))
+        return dict(agent=label, place='tab', pane=record['pane'], result='open')
     except ERRORS as exc:
-        rows.append(dict(agent='office', place='tab', pane=None, result='FAILED', detail=str(exc)))
-    return rows
+        return dict(agent=label, place='tab', pane=None, result='FAILED', detail=str(exc))
 
 
 def down(project, name=None, *, settings=None, agents=False, confirm=None):
@@ -305,6 +310,8 @@ def down(project, name=None, *, settings=None, agents=False, confirm=None):
         targets.append((name, name, record or {}, bool(record)))
     if not name and state.get('office'):
         targets.append(('office', None, state['office'], True))
+    if agents and state.get('telegram'):
+        targets.append(('telegram', None, state['telegram'], True))
     if agents:
         preview = []
         for target, key, record, owned in targets:
@@ -334,7 +341,7 @@ def down(project, name=None, *, settings=None, agents=False, confirm=None):
                 agent = next((a for a in live_agents if a['pane_id'] == pane), None)
                 if key is None:
                     if live.get('agent') or live.get('agent_session'):
-                        raise OSError('office now holds an agent; kept')
+                        raise OSError(f'{target} now holds an agent; kept')
                     herdr(project, 'tab', 'close', record['tab'])
                 else:
                     occupant = agent_name(agent) if agent else None
@@ -358,7 +365,7 @@ def down(project, name=None, *, settings=None, agents=False, confirm=None):
             else:
                 result = 'not running'
             if key is None:
-                state['office'] = None
+                state[target] = None
             elif key in state['agents']:
                 del state['agents'][key]
             save_state(project, state)

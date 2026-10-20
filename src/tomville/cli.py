@@ -66,6 +66,12 @@ def build_parser():
     send.add_argument('text', nargs='+', help='the prompt')
     send.add_argument('--wait', action='store_true', help='wait until the agent settles (passed to herdr)')
     send.add_argument('--timeout', type=int, metavar='MS', help='give up after MS milliseconds (passed to herdr)')
+    telegram = commands.add_parser('telegram', help='optional phone chat for this ville')
+    common_options(telegram)
+    telegram.add_argument('telegram_command', choices=('setup', 'run', 'status', 'pause', 'resume', 'off'))
+    reply = commands.add_parser('reply', help='reply to the ville Telegram chat (HTML bold/italic)')
+    common_options(reply)
+    reply.add_argument('text')
     hook = commands.add_parser('hook', help=argparse.SUPPRESS)
     hook.add_argument('name', choices=('claude-pre-tool-use',))
     new = commands.add_parser('new', help='create a new ville for this project')
@@ -318,6 +324,28 @@ def main(argv=None):
         settings = load_settings(project, config=args.config, **{key: getattr(args, keys.get(key, key), None) for key in ('source', 'check_seconds', 'poll_seconds', 'pets', 'fps', 'style', 'theme', 'layout', 'team', 'lead', 'demo', 'still')})
         if args.verbose:
             print(f'Project: {project} · Settings: {config_path(args.config)}', file=sys.stderr)
+        if args.command in ('telegram', 'reply'):
+            from tomville.core import telegram
+            if args.command == 'reply':
+                from tomville.core.messages import repo_root
+                root = repo_root(project)
+                telegram.reply(root, load_settings(root, config=args.config), args.text)
+                return 0
+            action = args.telegram_command
+            if action == 'setup':
+                telegram.setup(project, settings, prompt)
+            elif action == 'run':
+                telegram.run(project, settings)
+            elif action == 'off':
+                telegram.off(project, settings, lambda question: input(question + ' [y/N] ').lower() in ('yes', 'y'))
+            elif action in ('pause', 'resume'):
+                telegram.change_config(settings, paused=action == 'pause')
+                output('Paused' if action == 'pause' else 'Resumed', args)
+            else:
+                ok, detail = telegram.health(settings)
+                output({'ok': ok, 'detail': detail}, args, 'Telegram: ' + detail)
+                return int(not ok)
+            return 0
         if args.command == 'status':
             return status_command(args, project, settings)
         if args.command == 'doctor':
