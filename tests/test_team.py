@@ -119,6 +119,30 @@ def test_up_reports_running_agent_waiting_for_answer_as_running_not_failed(runti
     assert not any(a[1:3] == ['agent', 'start'] for a, kw in calls)
 
 
+@pytest.mark.parametrize('prompt_sent,same_pane,failed', [(False, True, True), (None, True, True), (True, True, False), (False, False, False)])
+def test_up_blocked_owned_agent_distinguishes_pending_startup(runtime, monkeypatch, prompt_sent, same_pane, failed):
+    project, calls, agents, panes, tabs = runtime
+    # Replay a detected Codex process, stopped on the fixture runtime's trust question.
+    live = recorded('herdr_agent_start.json')['result']['agent']
+    live.update(name='worker', agent='codex', agent_status='blocked', pane_id='live-pane')
+    agents.append(live)
+    owned = {'pane': 'live-pane' if same_pane else 'old-pane', 'terminal': 'term', 'kind': 'codex'}
+    if prompt_sent is not None:
+        owned['prompt_sent'] = prompt_sent
+    team.save_state(project, {'agents': {'worker': owned}, 'office': None})
+    monkeypatch.setattr(team.shutil, 'which', lambda kind: '/fixture/codex')
+    rows = team.up(project, settings(worker=AgentSpec('worker', 'codex')))
+    if failed:
+        assert rows[0]['result'] == 'FAILED'
+        assert rows[0]['pane'] == 'live-pane'
+        assert 'Trust this folder?' in rows[0]['detail']
+        assert rows[0]['fix'].startswith('Answer the startup question in that pane')
+    else:
+        assert rows[0]['result'] == 'already running (waiting for an answer)'
+    assert team.load_state(project)['agents']['worker'] == owned
+    assert not any(a[0] == 'tmv' or a[1:3] == ['agent', 'start'] for a, kw in calls)
+
+
 def test_open_existing_worktree_and_split(runtime, monkeypatch):
     project, calls, agents, panes, tabs = runtime
     original = team.run_command
