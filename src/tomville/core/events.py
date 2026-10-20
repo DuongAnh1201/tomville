@@ -122,13 +122,18 @@ class EventReader:
             try:
                 # Open before the snapshot so events during startup remain buffered.
                 path = os.environ.get('HERDR_SOCKET_PATH', str(Path.home() / '.config/herdr/herdr.sock'))
-                reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(path), 3)
+                # In Python 3.11 wait_for can swallow cancellation when its
+                # inner task completes concurrently. Keep timeouts in this task
+                # so shutting down cannot leave the reader loop alive.
+                async with asyncio.timeout(3):
+                    reader, writer = await asyncio.open_unix_connection(path)
                 await refresh()
                 subscriptions = [{'type': name} for name in ('pane.agent_detected', 'pane.closed')]
                 subscriptions += [{'type': 'pane.agent_status_changed', 'pane_id': pane} for pane in self.agents]
                 writer.write((json.dumps({'id': 'tomville', 'method': 'events.subscribe', 'params': {'subscriptions': subscriptions}}) + '\n').encode())
                 await writer.drain()
-                reply = json.loads(await asyncio.wait_for(reader.readline(), 3))
+                async with asyncio.timeout(3):
+                    reply = json.loads(await reader.readline())
                 if 'error' in reply:
                     raise OSError(str(reply['error']))
                 # Reconcile again after subscription to cover the initial snapshot gap.

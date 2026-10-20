@@ -85,47 +85,107 @@ def test_settings_precedence_and_validation(tmp_path, monkeypatch):
 
 
 def test_socket_status_and_disconnect_polling(tmp_path, monkeypatch):
-    async def run():
-        # Short folder: macOS limits socket paths to 104 bytes and its tmp_path is long.
-        socket = Path(tempfile.mkdtemp(prefix='tmv', dir='/tmp')) / 'herdr.sock'
+    async def run(socket):
         monkeypatch.setenv('HERDR_SOCKET_PATH', str(socket))
         agent = parse_agents(json.loads((FIXTURES / 'herdr_agent_list.json').read_text()))[0]
         calls = 0
-        subscribed = asyncio.Event()
-        received = []
+        blocked, polled = asyncio.Event(), asyncio.Event()
+        handlers = []
         async def snapshot():
             nonlocal calls
             calls += 1
+            if calls >= 3:  # initial, reconciled, then disconnect fallback
+                polled.set()
             return [agent]
         monkeypatch.setattr(events, 'agent_list', snapshot)
+        def emit(event):
+            if isinstance(event, AgentStatusChanged) and event.new == Status.BLOCKED:
+                blocked.set()
         async def serve(reader, writer):
             try:
-                request = json.loads(await reader.readline())
+                request = json.loads(await asyncio.wait_for(reader.readline(), 2))
                 assert {'type': 'pane.agent_status_changed', 'pane_id': agent.pane_id} in request['params']['subscriptions']
+                # Stop accepting before disconnecting, so the reader must poll
+                # instead of racing another connection against test cleanup.
+                server.close()
                 writer.write(b'{"id":"tomville","result":{"type":"subscription_started"}}\n')
                 writer.write((json.dumps({'event': 'pane.agent_status_changed', 'data': {'pane_id': agent.pane_id, 'agent_status': 'blocked'}}) + '\n').encode())
-                await writer.drain()
-                subscribed.set()
+                await asyncio.wait_for(writer.drain(), 2)
             finally:
                 writer.close()
-                await writer.wait_closed()
-        server = await asyncio.start_unix_server(serve, path=str(socket))
+                await asyncio.wait_for(writer.wait_closed(), 2)
+        def connected(reader, writer):
+            handlers.append(asyncio.create_task(serve(reader, writer)))
+        server = await asyncio.wait_for(asyncio.start_unix_server(connected, path=str(socket)), 2)
         reader = EventReader(tmp_path, ReaderSettings(poll_seconds=.01))
-        task = asyncio.create_task(reader._agents(received.append))
+        task = asyncio.create_task(reader._agents(emit))
         try:
-            await asyncio.wait_for(subscribed.wait(), 2)
-            server.close()
-            await server.wait_closed()
-            await asyncio.sleep(.06)
-            assert any(isinstance(e, AgentStatusChanged) and e.new == Status.BLOCKED for e in received)
-            assert calls >= 3  # initial, reconciled, and fallback snapshots
+            await asyncio.wait_for(blocked.wait(), 2)
+            await asyncio.wait_for(polled.wait(), 2)
+            assert calls >= 3
             assert not task.done()
         finally:
             task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
-            server.close()
-            await server.wait_closed()
-    asyncio.run(run())
+            try:
+                await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 2)
+            finally:
+                server.close()
+                await asyncio.wait_for(server.wait_closed(), 2)
+                # Observe handler failures and finish all clients before the loop closes.
+                await asyncio.wait_for(asyncio.gather(*handlers), 2)
+    # Short folder: macOS limits socket paths to 104 bytes. Remove it on failure too.
+    with tempfile.TemporaryDirectory(prefix='tmv', dir='/tmp') as directory:
+        asyncio.run(asyncio.wait_for(run(Path(directory) / 'herdr.sock'), 10))
+
+
+@pytest.mark.parametrize('stage', ['connect', 'subscribe'])
+def test_socket_cancellation_when_operation_completes(tmp_path, monkeypatch, stage):
+    """Force the Python 3.11 wait_for completion/cancellation race, without a socket."""
+    async def run():
+        agent = parse_agents(json.loads((FIXTURES / 'herdr_agent_list.json').read_text()))[0]
+        async def snapshot():
+            return [agent]
+        monkeypatch.setattr(events, 'agent_list', snapshot)
+        task = None
+        class Writer:
+            closed = False
+            def write(self, data):
+                pass
+            async def drain(self):
+                pass
+            def close(self):
+                self.closed = True
+            async def wait_closed(self):
+                pass
+        class Reader:
+            reads = 0
+            async def readline(self):
+                self.reads += 1
+                if self.reads == 1:
+                    # Cancel in the same loop turn as a successful acknowledgement.
+                    if stage == 'subscribe':
+                        task.cancel()
+                    return b'{"result":{}}\n'
+                return await asyncio.wait_for(asyncio.Event().wait(), 2)
+        writer = Writer()
+        async def connect(path):
+            if stage == 'connect':
+                task.cancel()
+            return Reader(), writer
+        monkeypatch.setattr(asyncio, 'open_unix_connection', connect)
+        reader = EventReader(tmp_path, ReaderSettings(poll_seconds=.01))
+        task = asyncio.create_task(reader._agents(lambda event: None))
+        try:
+            # shield lets the deadline fail the assertion without issuing the
+            # second cancellation that would hide a swallowed first cancellation.
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(asyncio.shield(task), .5)
+            assert task.cancelled()
+            assert writer.closed
+        finally:
+            task.cancel()
+            await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 2)
+    asyncio.run(asyncio.wait_for(run(), 5))
 
 
 def test_first_state_goes_to_snapshot_not_events(tmp_path):
