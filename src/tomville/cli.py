@@ -220,6 +220,19 @@ def confirm(question):
     return prompt(question + ' (yes/no)', 'yes').lower().startswith('y')
 
 
+def telegram_setup(project, args):
+    """Run `tmv telegram setup` for the new ville; a failure leaves the ville without Telegram."""
+    command = [sys.executable, '-m', 'tomville.cli', '-C', str(project), 'telegram', 'setup']
+    if args.config:
+        command[4:4] = ['--config', str(args.config)]
+    try:
+        failed = subprocess.run(command).returncode
+    except OSError as exc:
+        failed = str(exc)
+    if failed:
+        print(f'Telegram is not set up ({failed}); run `tmv telegram setup` to try again.')
+
+
 def new_command(args, project, *, start=True):
     from tomville.core import ville
 
@@ -228,6 +241,8 @@ def new_command(args, project, *, start=True):
     ask = (lambda question, default: default) if args.yes else prompt
     answers = ville.ask_answers(project, args.name, ask)
     print(f'Saved {ville.write_ville(project, answers.data())}')
+    if answers.telegram:
+        telegram_setup(project, args)
     settings = load_settings(project, config=args.config)
     failed = ville.run_steps(project, settings, ville.STEPS, args.claude_settings or ville.claude_settings_path())
     if start and answers.agent_specs and not args.yes and confirm('Start the team now?'):

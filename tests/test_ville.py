@@ -40,7 +40,7 @@ def scripted(*answers):
 
 
 def test_questions_for_lead_and_workers(tmp_path):
-    ask = scripted('Tom ville', 'lead', 'boss', 'w1, w2', None, None, None, None, None, None, None, None, 'no', 'dog', 'sheep', 'cat', 'tasks-md', '30', 'no')
+    ask = scripted('Tom ville', 'lead', 'boss', 'w1, w2', None, None, None, None, None, None, None, None, 'no', 'dog', 'sheep', 'cat', 'tasks-md', '30', 'no', None)
     a = ville.ask_answers(tmp_path, None, ask)
     assert (a.name, a.shape, a.lead, a.workers) == ('Tom ville', 'lead', 'boss', ['w1', 'w2'])
     assert a.pets == {'boss': 'dog', 'w1': 'sheep', 'w2': 'cat'}
@@ -50,14 +50,14 @@ def test_questions_for_lead_and_workers(tmp_path):
     assert settings.style == 'ascii' and settings.source == 'tasks-md'
 
 
-def wizard(tmp_path, *agent_answers, tail=('dog', 'sheep', 'cat', 'tasks-md', '30', 'yes')):
+def wizard(tmp_path, *agent_answers, tail=('dog', 'sheep', 'cat', 'tasks-md', '30', 'yes', None)):
     ask = scripted('V', 'lead', 'boss', 'w1,w2', *agent_answers, *tail)
     return ville.ask_answers(tmp_path, None, ask)
 
 
 def test_agent_defaults_with_a_secretary(tmp_path, monkeypatch):
     monkeypatch.setattr(ville, 'run_command', lambda args, project: 'tom@example.com\n')
-    a = wizard(tmp_path, *[None] * 8, None, None, tail=(None,) * 4 + ('tasks-md', '30', 'yes'))
+    a = wizard(tmp_path, *[None] * 8, None, None, tail=(None,) * 4 + ('tasks-md', '30', 'yes', None))
     assert list(a.agent_specs) == ['boss', 'w1', 'w2', 'secretary']
     assert a.agent_specs['boss'] == {'kind': 'claude', 'model': '', 'place': 'here'}
     assert a.agent_specs['w1'] == {'kind': 'codex', 'model': '', 'place': 'worktree'}
@@ -68,7 +68,7 @@ def test_agent_defaults_with_a_secretary(tmp_path, monkeypatch):
 
 
 def test_custom_model_each_place_and_no_secretary(tmp_path):
-    a = wizard(tmp_path, 'claude', 'claude-opus-5-5', 'gemini', 'gemini-x', 'tab', 'codex', '', 'pane', 'no', tail=(None,) * 3 + ('tasks-md', '30', 'yes'))
+    a = wizard(tmp_path, 'claude', 'claude-opus-5-5', 'gemini', 'gemini-x', 'tab', 'codex', '', 'pane', 'no', tail=(None,) * 3 + ('tasks-md', '30', 'yes', None))
     assert a.agent_specs == {
         'boss': {'kind': 'claude', 'model': 'claude-opus-5-5', 'place': 'here'},
         'w1': {'kind': 'gemini', 'model': 'gemini-x', 'place': 'tab'},
@@ -78,7 +78,7 @@ def test_custom_model_each_place_and_no_secretary(tmp_path):
 
 
 def test_bad_place_and_kind_are_asked_again(tmp_path):
-    a = wizard(tmp_path, None, None, 'Bad Kind!', 'codex', '', 'moon', 'tab', None, None, None, 'no', tail=(None,) * 3 + ('tasks-md', '30', 'yes'))
+    a = wizard(tmp_path, None, None, 'Bad Kind!', 'codex', '', 'moon', 'tab', None, None, None, 'no', tail=(None,) * 3 + ('tasks-md', '30', 'yes', None))
     assert a.agent_specs['w1'] == {'kind': 'codex', 'model': '', 'place': 'tab'}
 
 
@@ -199,7 +199,7 @@ def test_new_yes_makes_a_working_ville(tmp_path, capsys, isolated):
 
 
 def test_new_asks_the_questions(tmp_path, monkeypatch):
-    answers = iter(['Mine', 'lead', 'claude', 'codex1', '', '', '', '', 'worktree', 'no', 'cat', 'dog', 'tasks-md', '60', 'yes', 'no'])
+    answers = iter(['Mine', 'lead', 'claude', 'codex1', '', '', '', '', 'worktree', 'no', 'cat', 'dog', 'tasks-md', '60', 'yes', 'no', 'no'])
     monkeypatch.setattr('builtins.input', lambda text: next(answers))
     assert main(['new', '-C', str(tmp_path), '--claude-settings', str(tmp_path / 'c.json')]) == 0
     assert load_settings(tmp_path).name == 'Mine' and (tmp_path / 'c.json').exists()
@@ -260,7 +260,7 @@ def test_bare_tomville_offers_new_in_a_project_without_a_ville(tmp_path, monkeyp
     monkeypatch.setattr('tomville.tui.app.TomvilleApp', FakeApp)
     monkeypatch.setattr('sys.stdin.isatty', lambda: True)
     monkeypatch.setattr('sys.stdout.isatty', lambda: True)
-    answers = iter(['yes', 'Offered', 'lead', 'claude', 'codex1', '', '', '', '', 'worktree', 'no', 'cat', 'dog', 'tasks-md', '60', 'yes', 'no'])
+    answers = iter(['yes', 'Offered', 'lead', 'claude', 'codex1', '', '', '', '', 'worktree', 'no', 'cat', 'dog', 'tasks-md', '60', 'yes', 'no', 'no'])
     monkeypatch.setattr('builtins.input', lambda text: next(answers))
     assert main(['-C', str(tmp_path)]) == 0
     assert ville.has_ville(tmp_path) and started[0].name == 'Offered'
@@ -273,3 +273,39 @@ def test_bare_tomville_does_not_ask_without_a_terminal(tmp_path, monkeypatch):
     monkeypatch.setattr('tomville.tui.app.TomvilleApp', lambda **kw: type('A', (), {'run': lambda self: None})())
     assert main(['-C', str(tmp_path)]) == 0
     assert not ville.has_ville(tmp_path)
+
+
+def test_telegram_question_defaults_to_no(tmp_path):
+    ask = scripted('V', 'lead', 'boss', 'w1', *[None] * 8, 'dog', 'sheep', 'tasks-md', '30', 'yes', None)
+    a = ville.ask_answers(tmp_path, None, ask)
+    assert ask.asked[-1].startswith('Connect a Telegram chat to this ville?') and a.telegram is False
+
+
+def test_telegram_question_yes_and_other_shapes(tmp_path, capsys):
+    ask = scripted('V', 'lead', 'boss', 'w1', *[None] * 8, 'dog', 'sheep', 'tasks-md', '30', 'yes', 'yes')
+    assert ville.ask_answers(tmp_path, None, ask).telegram is True
+    ask = scripted(None, 'pipeline', 'plan coder', None, None, 'tasks-md', '15', None)
+    a = ville.ask_answers(tmp_path, None, ask)
+    assert a.telegram is False and not any('Telegram' in q for q in ask.asked)
+    assert "Sorry, we haven't done Telegram for the pipeline team yet" in capsys.readouterr().out
+
+
+def test_new_runs_telegram_setup_only_on_yes(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr('tomville.cli.telegram_setup', lambda project, args: calls.append(project))
+    assert main(['new', '--yes', '-C', str(tmp_path)]) == 0  # --yes keeps no
+    assert calls == []
+    answers = iter(['Mine', 'lead', 'claude', 'codex1', '', '', '', '', 'worktree', 'no', 'cat', 'dog', 'tasks-md', '60', 'yes', 'yes', 'no'])
+    monkeypatch.setattr('builtins.input', lambda text: next(answers))
+    other = tmp_path / 'other'
+    other.mkdir()
+    assert main(['new', '-C', str(other), '--claude-settings', str(tmp_path / 'c.json')]) == 0
+    assert calls == [other.resolve()]
+
+
+def test_rules_mention_telegram_only_when_it_is_on(tmp_path):
+    off = settings_from_data({'name': 'V', 'team': {'lead': 'claude'}, 'board': {'source': 'tasks-md'}})
+    on = settings_from_data({'name': 'V', 'team': {'lead': 'claude'}, 'board': {'source': 'tasks-md'}, 'telegram': {'enabled': True, 'bot': '@v_bot', 'id': 'k3f9k3f9k3f9'}})
+    assert 'Telegram' not in ville.rules_text(off) and 'tmv reply' not in ville.rules_text(off)
+    text = ville.rules_text(on)
+    assert '`📱 Tom (Telegram):`' in text and 'tmv reply "text"' in text and 'Agents not in `[telegram] from` never use `tmv reply`' in text

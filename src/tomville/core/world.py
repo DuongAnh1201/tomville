@@ -10,6 +10,7 @@ review") lives in a `Play`, one per shape, see `core/shapes/lead_play.py`.
 from __future__ import annotations
 
 import random
+import re
 from collections import deque
 from dataclasses import dataclass, field, replace
 from typing import Protocol
@@ -24,6 +25,7 @@ from tomville.core.models import (
     Card,
     CardChanged,
     CardRemoved,
+    Message,
     MessageSent,
     Column,
     Event,
@@ -40,6 +42,7 @@ WANDER_SPEED = 1.5
 WANDER_TRIES = 8  # random lounge spots tried before staying put
 TILE = 2  # cells per sprite, as in sprites.py
 BUBBLE_SECONDS = 3.0
+PHONE_STAY = 2.0  # seconds the 📱 envelope stays at the desk
 SLEEP_AFTER = 60.0  # seconds idle before a pet sleeps
 BLINK_HZ = 2.0
 BOARD_COLUMN_W = 7  # the wall board headings "Todo   Doing  Review" are 7 cells apart
@@ -101,6 +104,7 @@ class Parcel:
     x: float
     y: float
     path: list[Cell] = field(default_factory=list)
+    stay: float | None = None  # seconds it stays after arriving; None: until removed
 
     @property
     def cell(self) -> Cell:
@@ -186,6 +190,8 @@ class World:
             self.play.on_card(self, event.card, prev)
         elif isinstance(event, CardRemoved):
             self.cards.pop(event.id, None)
+        elif isinstance(event, MessageSent) and event.message.via.startswith("telegram"):
+            self._phone_message(event.message)
         elif isinstance(event, MessageSent):
             m = event.message
             self._message(m.sender, m.to, m.text)
@@ -223,6 +229,22 @@ class World:
             del self.pets[name]
         else:
             self._relayout(snap=False)
+
+    def _phone_message(self, m: Message) -> None:
+        """Tom's phone: 📱 comes in at the door; a reply or an approval shows as a bubble."""
+        text = re.sub(r"<[^>]+>", "", m.text).strip().replace("\n", " ")
+        if m.via == "telegram-approval":
+            self.say(m.to, "❌" if text.startswith("❌") else "✅")
+        elif m.via == "telegram" and m.sender == "tom":
+            door = self._door_cell()
+            spot = self._front_of_desk(m.to) or (self.pets[m.to].cell if m.to in self.pets else None)
+            if door and spot:
+                key = f"📱{len(self.parcels)}-{self.time}"
+                self.parcels[key] = Parcel("📱", *door, stay=PHONE_STAY)
+                self.move_parcel(key, spot)
+            self.say(m.to, f"📱 {text}")
+        elif m.via == "telegram" and m.to == "tom" and m.sender:
+            self.say(m.sender, f"📱 → tom: {text}")
 
     def _message(self, sender: str | None, to: str, text: str) -> None:
         """The envelope walk: the sender carries ✉ to the receiver's desk and walks back.
@@ -393,7 +415,12 @@ class World:
 
     def tick(self, dt: float) -> None:
         self.time += dt
-        for parcel in self.parcels.values():
+        for key, parcel in list(self.parcels.items()):
+            if parcel.stay is not None and not parcel.path:
+                parcel.stay -= dt
+                if parcel.stay <= 0:
+                    del self.parcels[key]
+                    continue
             if self.still and parcel.path:
                 parcel.x, parcel.y = parcel.path[-1]
                 parcel.path.clear()
