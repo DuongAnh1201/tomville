@@ -21,6 +21,7 @@ from pathlib import Path
 from tomville.core.models import Message
 
 LOG = Path('.tomville') / 'messages.jsonl'
+TELEGRAM_PREFIX = '📱 Tom (Telegram): '
 
 
 def repo_root(cwd: Path) -> Path:
@@ -96,12 +97,13 @@ def sender_name() -> str | None:
     return next((a.name for a in agents if a.pane_id == pane), None)
 
 
-def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | None = None, *, sender: str | None = None, via: str = 'send', target: str | None = None) -> str:
+def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | None = None, *, sender: str | None = None, via: str = 'send', target: str | None = None, prompt_prefix: str = '') -> str:
     """Prompt through herdr, then log the recipient name.
 
-    `target` optionally selects a resolved pane. Nothing is logged if herdr refuses.
+    `target` optionally selects a resolved pane; `prompt_prefix` labels delivery
+    without changing the logged text. Nothing is logged if herdr refuses.
     """
-    args = ['herdr', 'agent', 'prompt', target or to, text]
+    args = ['herdr', 'agent', 'prompt', target or to, prompt_prefix + text]
     if wait:
         args.append('--wait')
     if timeout is not None:

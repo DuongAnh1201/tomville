@@ -106,9 +106,10 @@ def message(text):
 
 def test_routing_and_rejections(bridge):
     bridge.handle(message('hello lead'))
-    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello lead', sender='tom', via='telegram', target='pane-claude')
+    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello lead', sender='tom', via='telegram', target='pane-claude', prompt_prefix='📱 Tom (Telegram): ')
     bridge.handle(message('/codex_1 test'))
     assert tg.messages.send.call_args.args[1:3] == ('codex-1', 'test')
+    assert tg.messages.send.call_args.kwargs['prompt_prefix'] == '📱 Tom (Telegram): '
     bridge.handle(message('/status_agent test'))
     assert tg.messages.send.call_args.args[1] == 'status'
     count = tg.messages.send.call_count
@@ -336,7 +337,7 @@ def test_routes_to_recorded_unnamed_lead_pane(bridge, monkeypatch):
     tg.team.save_state(bridge.project, {'agents': {}, 'lead_pane': lead['pane_id']})
     monkeypatch.setattr(tg.team, 'herdr', Mock(return_value={'agents': agents}))
     bridge.handle(message('hello unnamed lead'))
-    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello unnamed lead', sender='tom', via='telegram', target=lead['pane_id'])
+    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello unnamed lead', sender='tom', via='telegram', target=lead['pane_id'], prompt_prefix='📱 Tom (Telegram): ')
     assert 'Sent to <b>claude</b>' in bridge.bot.send.call_args.args[1]
 
 
@@ -351,9 +352,9 @@ def test_agent_command_resolves_live_pane_and_keeps_log_name(bridge, monkeypatch
     run = Mock(return_value=subprocess.CompletedProcess([], 0, 'sent', ''))
     monkeypatch.setattr(tg.messages.subprocess, 'run', run)
     bridge.handle(message('/codex_1 run tests'))
-    assert run.call_args.args[0] == ['herdr', 'agent', 'prompt', worker['pane_id'], 'run tests']
+    assert run.call_args.args[0] == ['herdr', 'agent', 'prompt', worker['pane_id'], '📱 Tom (Telegram): run tests']
     log = json.loads((bridge.project / '.tomville/messages.jsonl').read_text())
-    assert (log['from'], log['to'], log['via']) == ('tom', 'codex1', 'telegram')
+    assert (log['from'], log['to'], log['via'], log['text']) == ('tom', 'codex1', 'telegram', 'run tests')
 
 
 @pytest.mark.parametrize('failure', ['missing', 'ambiguous', 'renamed', 'terminal', 'kind', 'send', 'send-json'])
@@ -520,3 +521,17 @@ def test_connect_closes_all_failed_sockets(monkeypatch):
     with pytest.raises(OSError, match='IPv4 unreachable'):
         tg.TelegramHTTPSHandler().connect(('api.telegram.org', 443), 40)
     assert all(sock.close.call_count == 1 for sock in sockets)
+
+
+def test_plain_phone_prefix_is_delivered_but_not_added_to_log(bridge, monkeypatch):
+    import subprocess
+    bridge.target_pane = Mock(return_value='lead-pane')
+    monkeypatch.setattr(tg.messages, 'send', send_message)
+    run = Mock(return_value=subprocess.CompletedProcess([], 0, 'sent', ''))
+    monkeypatch.setattr(tg.messages.subprocess, 'run', run)
+    bridge.handle(message('Please check this\nand report back'))
+    assert run.call_args.args[0] == ['herdr', 'agent', 'prompt', 'lead-pane',
+                                  '📱 Tom (Telegram): Please check this\nand report back']
+    entry = json.loads((bridge.project / '.tomville/messages.jsonl').read_text())
+    assert entry['text'] == 'Please check this\nand report back'
+    assert (entry['from'], entry['to'], entry['via']) == ('tom', 'claude', 'telegram')
