@@ -13,6 +13,7 @@ import time
 
 from tomville.core import messages, team
 from tomville.core.models import Message
+from tomville.core.questions import question_lines
 from tomville.core.settings import load_settings
 
 DIRECTORY = Path('.tomville/approvals')
@@ -147,8 +148,7 @@ def hook(kind, stream=None, *, out=None, clock=time.time, sleep=time.sleep):
             text = payload.get('last_assistant_message', '')
             if not isinstance(text, str):
                 return 0
-            text = text.rstrip().rstrip('*_`').rstrip()
-            if not text.endswith(('?', '？')):
+            if not question_lines(text):
                 return 0
         accepted = True
         if kind == 'ask-user-question':

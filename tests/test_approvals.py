@@ -196,7 +196,20 @@ def test_safety_block_notice_and_retry_is_toms_message(bridge, choice):
     else: tg.messages.send.assert_not_called()
 
 
-@pytest.mark.parametrize('text,expected', [('All done.',False), ('**Proceed?**',True), ('Use `pytest`?',True)])
+@pytest.mark.parametrize('text,expected', [
+    ('All done.', False), ('**Proceed?**', True), ('Use `pytest`?', True),
+    ('Want to do it now?\nStart with step 1: run the checks.', True),
+    ('Want to do it now? Start with step 1: run the checks.', True),
+    ('Summary first.\nReady to proceed？\nNext steps below.', True),
+    ('```python\nprint("Ready?")\n```\nDone.', False),
+    ('~~~text\nReady?\n~~~', False), ('    Ready?\nDone.', False),
+    ('Use `ready?` here.', False), ('Use ``is `ready?` `` here.', False),
+    ('See https://example.com/?next=ready', False), ('See https://example.com/?', False),
+    ('He said "Ready? https://example.com/"', False), ('See [docs](./help?ready)', False),
+    ('> Ready?\nThat was quoted.', False), ('He asked "Ready?"', False),
+    ("He asked 'Ready?'", False), ('He asked “Ready?”', False),
+    ("What's next?\nI'll wait.", True),
+])
 def test_stop_only_forwards_questions_and_safe_markdown(bridge, text, expected):
     value = payload(bridge, 'stop'); value['last_assistant_message'] = text
     output = io.StringIO()
@@ -391,3 +404,36 @@ def test_long_hook_requests_keep_log_brief_and_one_line(bridge):
     assert len(entry['text']) <= 512 and len(entry['text'].splitlines()) == 1
     assert 'Bash: echo line' in entry['text'] and ' — Reason to deny' in entry['text']
     assert '…' in entry['text']
+
+
+def test_stop_forwards_whole_message_bolds_question_and_keeps_code(bridge):
+    text = ('Summary first.\n```python\nprint("Example?")\n```\n'
+            'Ready to proceed? Start with step 1.\n*More context below.*\n' + 'Extra detail. ' * 600)
+    value = payload(bridge,'stop'); value['last_assistant_message'] = text
+    output = io.StringIO()
+    ap.hook('stop',io.StringIO(json.dumps(value)),out=output,clock=lambda:100)
+    ta.scan(bridge)
+    rendered = bridge.bot.send.call_args.args[1]
+    assert rendered.startswith('💬 Summary first.\n')
+    assert '<b>Ready to proceed? Start with step 1.</b>' in rendered
+    assert '<pre><code class="language-python">print(&quot;Example?&quot;)\n</code></pre>' in rendered
+    assert '<i>More context below.</i>' in rendered
+    assert rendered.endswith('Extra detail. ' * 600)
+    assert output.getvalue() == ''
+    assert not bridge.bot.send.call_args.kwargs  # Notice only, no approval buttons.
+    parts = tg.chunks(rendered)
+    assert len(parts) > 1 and all(len(part) <= 4096 for part in parts)
+    assert ta.markdown('Context\n*Ready?*\nNotes.', bold_lines={1}) == 'Context\n<i><b>Ready?</b></i>\nNotes.'
+    assert ta.markdown('Use `pytest`?', bold_lines={0}) == '<b>Use </b><code>pytest</code><b>?</b>'
+
+
+@pytest.mark.parametrize('change', ['worker', 'disabled'])
+def test_middle_question_still_requires_lead_and_telegram(bridge, monkeypatch, change):
+    if change == 'worker': monkeypatch.setenv('HERDR_PANE_ID','worker-pane')
+    else: ville.update_ville(bridge.project,{'telegram':{'enabled':False}})
+    value = payload(bridge,'stop'); value['last_assistant_message'] = 'Ready?\nNotes follow.'
+    output = io.StringIO()
+    ap.hook('stop',io.StringIO(json.dumps(value)),out=output,clock=lambda:100)
+    ta.scan(bridge)
+    bridge.bot.send.assert_not_called()
+    assert output.getvalue() == ''
