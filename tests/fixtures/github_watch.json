@@ -1,0 +1,156 @@
+{
+  "issues": [
+    {
+      "assignees": [],
+      "author": {
+        "id": "U_kgDOC1WdsQ",
+        "is_bot": false,
+        "login": "DuongAnh1201",
+        "name": ""
+      },
+      "labels": [
+        {
+          "id": "LA_kwDOVM3uns8AAAAC9mESng",
+          "name": "bug",
+          "description": "Something isn't working",
+          "color": "d73a4a"
+        },
+        {
+          "id": "LA_kwDOVM3uns8AAAAC9ofIbw",
+          "name": "status:doing",
+          "description": "Board: in progress",
+          "color": "fbca04"
+        },
+        {
+          "id": "LA_kwDOVM3uns8AAAAC9ofJ4A",
+          "name": "agent:codex1",
+          "description": "Worker: data side",
+          "color": "a6da95"
+        }
+      ],
+      "number": 74,
+      "state": "OPEN",
+      "title": "The lead doesn't check GitHub at the ville's board interval (check_seconds)",
+      "updatedAt": "2026-10-20T20:40:57Z",
+      "url": "https://github.com/DuongAnh1201/tomville/issues/74"
+    },
+    {
+      "assignees": [],
+      "author": {
+        "id": "U_kgDOC1WdsQ",
+        "is_bot": false,
+        "login": "DuongAnh1201",
+        "name": ""
+      },
+      "labels": [
+        {
+          "id": "LA_kwDOVM3uns8AAAAC9ofI1w",
+          "name": "status:review",
+          "description": "Board: ready for review",
+          "color": "0e8a16"
+        },
+        {
+          "id": "LA_kwDOVM3uns8AAAAC9ofJ4A",
+          "name": "agent:codex1",
+          "description": "Worker: data side",
+          "color": "a6da95"
+        }
+      ],
+      "number": 72,
+      "state": "CLOSED",
+      "title": "Telegram: show code and diffs like an IDE (monospace, diff colours, per file)",
+      "updatedAt": "2026-10-20T20:40:04Z",
+      "url": "https://github.com/DuongAnh1201/tomville/issues/72"
+    }
+  ],
+  "prs": [
+    {
+      "author": {
+        "id": "U_kgDOC1WdsQ",
+        "is_bot": false,
+        "login": "DuongAnh1201",
+        "name": ""
+      },
+      "headRepositoryOwner": {
+        "id": "U_kgDOC1WdsQ",
+        "login": "DuongAnh1201"
+      },
+      "isCrossRepository": false,
+      "labels": [],
+      "number": 73,
+      "reviewDecision": "",
+      "reviewRequests": [],
+      "reviews": [],
+      "state": "MERGED",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-20T20:36:30Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/DuongAnh1201/tomville/actions/runs/39493361451/job/118871982705",
+          "name": "test (ubuntu-latest, 3.11)",
+          "startedAt": "2026-10-20T20:36:08Z",
+          "status": "COMPLETED",
+          "workflowName": "Tests"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-20T20:36:31Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/DuongAnh1201/tomville/actions/runs/39493361451/job/118871982874",
+          "name": "test (ubuntu-latest, 3.13)",
+          "startedAt": "2026-10-20T20:36:08Z",
+          "status": "COMPLETED",
+          "workflowName": "Tests"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-20T20:36:38Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/DuongAnh1201/tomville/actions/runs/39493361451/job/118871982523",
+          "name": "test (macos-latest, 3.11)",
+          "startedAt": "2026-10-20T20:36:08Z",
+          "status": "COMPLETED",
+          "workflowName": "Tests"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-20T20:36:33Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/DuongAnh1201/tomville/actions/runs/39493361451/job/118871982200",
+          "name": "test (macos-latest, 3.13)",
+          "startedAt": "2026-10-20T20:36:07Z",
+          "status": "COMPLETED",
+          "workflowName": "Tests"
+        }
+      ],
+      "title": "Telegram code blocks and file-aware PR diff replies",
+      "updatedAt": "2026-10-20T20:40:03Z",
+      "url": "https://github.com/DuongAnh1201/tomville/pull/73"
+    },
+    {
+      "author": {
+        "id": "MDQ6VXNlcjQ2MDIwNTY=",
+        "is_bot": false,
+        "login": "jay23606",
+        "name": "Jay"
+      },
+      "headRepositoryOwner": {
+        "id": "MDQ6VXNlcjQ2MDIwNTY=",
+        "name": "Jay",
+        "login": "jay23606"
+      },
+      "isCrossRepository": true,
+      "labels": [],
+      "number": 69,
+      "reviewDecision": "",
+      "reviewRequests": [],
+      "reviews": [],
+      "state": "OPEN",
+      "statusCheckRollup": [],
+      "title": "tmv up: report running agent waiting for an answer as running, not FAILED",
+      "updatedAt": "2026-10-20T19:14:12Z",
+      "url": "https://github.com/DuongAnh1201/tomville/pull/69"
+    }
+  ]
+}

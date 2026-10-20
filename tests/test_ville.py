@@ -83,7 +83,7 @@ def test_bad_place_and_kind_are_asked_again(tmp_path):
 
 
 def test_questions_for_a_pipeline_and_bad_answers_are_asked_again(tmp_path):
-    ask = scripted(None, 'pipeline', 'plan coder test', None, None, None, 'github', None, 'x', '5', '15', None)
+    ask = scripted(None, 'pipeline', 'plan coder test', None, None, None, 'github', None, 'x', '5', '15', None, None)
     a = ville.ask_answers(tmp_path, 'Pipe', ask)
     settings = settings_from_data(a.data())
     assert settings.team == 'pipeline' and settings.stages == ('plan', 'coder', 'test') and settings.lead is None
