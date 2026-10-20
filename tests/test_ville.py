@@ -168,7 +168,7 @@ def test_hook_added_kept_and_updated(tmp_path):
     path.write_text(json.dumps(data))
     assert ville.install_hook(path) == 'updated'
     assert json.loads(path.read_text())['hooks']['PreToolUse'][1]['hooks'][0]['command'] == ville.HOOK_COMMAND
-    assert len(json.loads(path.read_text())['hooks']['PreToolUse']) == 2
+    assert len(json.loads(path.read_text())['hooks']['PreToolUse']) == 3
 
 
 def test_hook_refuses_a_file_it_does_not_understand(tmp_path):

@@ -789,3 +789,18 @@ Rules for phase 1 that keep phase 3 easy:
 
 - [ ] Which pet and colour for each agent?
 - [ ] Licence: MIT, or another?
+
+
+### Lead questions on Telegram
+
+With the lead + workers team shape, Telegram enabled and paired, `tmv setup` installs Claude Code hooks for the lead’s permission requests, auto-mode safety blocks, structured questions and plain-text questions at the end of a turn. Workers and subagents are ignored. Enable `telegram.approvals` in the ville to answer permission and structured question dialogs; the bot must be running. Workers’ old screen-based approval buttons have been removed; Tomville never sends approval keys to a pane.
+
+Permission requests show the exact tool input and cwd, with edits also shown as diff blocks. Choose Allow once or Deny; replying to that message denies with your reason. Structured questions have option buttons, multi-select, and Other via a typed reply to the particular question message. Tap Submit answers after answering every question. Unanswered permission requests are denied after ten minutes; unanswered questions are cancelled. There is no persistent allow option. Pausing the bot prevents delivery and answers; accepted hook requests still reach their ten-minute deny deadline. The installed hook timeout is 660 seconds so the 600-second decision can return first.
+
+Safety blocks show the action and reason. Approve, retry sends Tom’s message to the lead; the safety check still decides on the retry. Leave it sends no prompt. Plain-text final messages ending with a question are forwarded with basic bold, italic and code formatting; replying reaches the lead normally.
+
+The hooks exchange requests and answers through private, ignored `.tomville/approvals/` files. Only the bot polls Telegram. Request IDs are random, answers are consumed once, late taps are ignored, and decisions/questions are logged in `messages.jsonl` as `telegram-approval` / `telegram-question`. Only the paired private chat can answer. Without the matching recorded lead pane, outside a ville, or with Telegram disabled, hooks return no answer immediately.
+
+Other team shapes are not supported: setup stops before token entry; a running bot replies with the unsupported-shape message and sends no notifications or questions. Telegram can be set up again after switching back to lead + workers.
+
+Coverage follows Claude Code’s hook events: PermissionDenied observes auto-mode denials, not manual denials, deny rules or another PreToolUse hook’s block. Sandboxed network permission prompts do not emit PermissionRequest and still require an in-pane answer. The implementation uses the documented hook contracts, checked against installed Claude Code 2.1.305; tests use synthetic contract fixtures, not live captures. Live hook/UI validation belongs to the lead after Tom’s approval.

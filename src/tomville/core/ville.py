@@ -278,32 +278,42 @@ def claude_settings_path() -> Path:
 
 
 def install_hook(path: Path) -> str:
-    """Add the Claude Code PreToolUse hook to a settings.json: 'added', 'updated' or 'unchanged'."""
+    """Install message logging and lead Telegram hooks, preserving other hooks."""
     data = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
     if not isinstance(data, dict) or not isinstance(data.get('hooks', {}), dict):
         raise ValueError(f'{path} does not look like Claude Code settings')
-    entries = data.setdefault('hooks', {}).setdefault('PreToolUse', [])
-    hook = {'type': 'command', 'command': HOOK_COMMAND, 'timeout': 10}
-    result = 'added'
-    for entry in entries:
-        for existing in entry.get('hooks', []):
-            if HOOK_MARKER in existing.get('command', ''):
-                result = 'unchanged' if existing == hook and entry.get('matcher') == 'Bash' else 'updated'
-                existing.clear()
-                existing.update(hook)
-                entry['matcher'] = 'Bash'
-                break
+    before = json.dumps(data, sort_keys=True)
+    definitions = [('PreToolUse', 'Bash', HOOK_MARKER, HOOK_COMMAND, 10),
+                   ('PreToolUse', 'AskUserQuestion', 'tmv hook ask-user-question', 'tmv hook ask-user-question', 660),
+                   ('PermissionRequest', '*', 'tmv hook permission-request', 'tmv hook permission-request', 660),
+                   ('PermissionDenied', '*', 'tmv hook permission-denied', 'tmv hook permission-denied', 10),
+                   ('Stop', None, 'tmv hook stop', 'tmv hook stop', 10)]
+    owned = any(marker in before for _, _, marker, _, _ in definitions)
+    for event, matcher, marker, command, timeout in definitions:
+        entries = data.setdefault('hooks', {}).setdefault(event, [])
+        hook = {'type': 'command', 'command': command, 'timeout': timeout}
+        for entry in entries:
+            for existing in entry.get('hooks', []):
+                if marker in existing.get('command', ''):
+                    existing.clear()
+                    existing.update(hook)
+                    if matcher is None:
+                        entry.pop('matcher', None)
+                    else:
+                        entry['matcher'] = matcher
+                    break
+            else:
+                continue
+            break
         else:
-            continue
-        break
-    else:
-        entries.append({'matcher': 'Bash', 'hooks': [hook]})
-    if result != 'unchanged':
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(path.name + '.tmp')
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
-        tmp.replace(path)
-    return result
+            entries.append(dict(hooks=[hook], **({'matcher': matcher} if matcher is not None else {})))
+    if json.dumps(data, sort_keys=True) == before:
+        return 'unchanged'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + '.tmp')
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    tmp.replace(path)
+    return 'updated' if owned else 'added'
 
 
 STEPS = ('labels', 'rules', 'hook')

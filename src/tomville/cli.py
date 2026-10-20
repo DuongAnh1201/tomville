@@ -79,7 +79,7 @@ def build_parser():
     reply_source.add_argument('--diff', type=positive_issue, metavar='PR', help='send a GitHub PR diff with per-file headers')
     reply_source.add_argument('--diff-file', type=Path, metavar='FILE', help='send a saved git diff')
     hook = commands.add_parser('hook', help=argparse.SUPPRESS)
-    hook.add_argument('name', choices=('claude-pre-tool-use',))
+    hook.add_argument('name', choices=('claude-pre-tool-use', 'permission-request', 'permission-denied', 'ask-user-question', 'stop'))
     new = commands.add_parser('new', help='create a new ville for this project')
     common_options(new)
     new.add_argument('name', nargs='?', help='name of the ville')
@@ -328,8 +328,11 @@ def main(argv=None):
         if not hasattr(args, name):
             setattr(args, name, default)
     if args.command == 'hook':
-        from tomville.core.messages import claude_hook
-        return claude_hook()
+        if args.name == 'claude-pre-tool-use':
+            from tomville.core.messages import claude_hook
+            return claude_hook()
+        from tomville.core.approvals import hook
+        return hook(args.name)
     project = args.project.expanduser().resolve()
     try:
         if args.command == 'config':

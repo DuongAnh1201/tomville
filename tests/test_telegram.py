@@ -117,7 +117,7 @@ def test_routing_and_rejections(bridge):
     assert tg.messages.send.call_count == count
     bridge.settings.team = 'pipeline'
     bridge.handle(message('plain text'))
-    assert 'needs a lead' in bridge.bot.send.call_args.args[1]
+    assert 'haven&#x27;t done Telegram for the pipeline team yet' in bridge.bot.send.call_args.args[1]
 
 
 def test_builtins_pause(bridge):
@@ -148,64 +148,14 @@ def live_agent(kind='claude'):
     return {'name': 'claude', 'agent': kind, 'agent_status': 'blocked', 'pane_id': 'w1:p1', 'terminal_id': 'term1'}
 
 
-@pytest.mark.parametrize('kind,yes,no', [('claude', '1', '3'), ('codex', 'y', 'esc')])
-def test_permission_parser(kind, yes, no):
-    screen = (FIXTURES / f'telegram_{kind}_permission.txt').read_text()
-    question = tg.parse_question(kind, screen)
-    assert (question.yes, question.no) == (yes, no)
-    assert 'uv run pytest' in question.text and '/root/project' in question.text
-    assert tg.parse_question('other', screen) is None
-    assert tg.parse_question(kind, 'Do something? yes/no') is None
-
-
-@pytest.mark.parametrize('choice,key', [('yes', '1'), ('no', '3')])
-def test_approval(bridge, monkeypatch, choice, key):
-    agent = live_agent()
-    screen = (FIXTURES / 'telegram_claude_permission.txt').read_text()
-    monkeypatch.setattr(tg.team, 'herdr', Mock(return_value={'agents': [agent]}))
-    monkeypatch.setattr(tg.team, 'run_command', Mock(return_value=screen))
-    bridge.blocked(dict(agent, status='blocked'))
-    token = next(iter(bridge.pending))
-    callback = copy.deepcopy(API['getUpdates']['result'][-1]['callback_query'])
-    callback['data'] = token + ':' + choice
-    bridge.callback(callback)
-    assert any(call.args[1:] == ('agent', 'send-keys', 'w1:p1', key) for call in tg.team.herdr.call_args_list)
-    assert 'telegram-approval' in (bridge.project / '.tomville/messages.jsonl').read_text()
-    count = tg.team.herdr.call_count
-    bridge.callback(callback)
-    assert tg.team.herdr.call_count == count
-
-
-@pytest.mark.parametrize('change', ['expired', 'text', 'pane', 'terminal', 'agent', 'wrong_chat', 'paused', 'unknown'])
-def test_approval_refused(bridge, monkeypatch, change):
-    agent = live_agent()
-    screen = (FIXTURES / 'telegram_claude_permission.txt').read_text()
-    herdr = Mock(return_value={'agents': [agent]})
+@pytest.mark.parametrize('name', ['claude', 'codex-1'])
+def test_blocked_never_issues_screen_approval_buttons(bridge, monkeypatch, name):
+    herdr = Mock(side_effect=AssertionError('no screen reading or keys'))
     monkeypatch.setattr(tg.team, 'herdr', herdr)
-    read = Mock(return_value=screen)
-    monkeypatch.setattr(tg.team, 'run_command', read)
-    if change == 'unknown':
-        read.return_value = 'unknown screen'
-    bridge.blocked(dict(agent, status='blocked'))
-    if change == 'unknown':
-        assert not bridge.pending
-        assert 'answer in its pane' in bridge.bot.send.call_args.args[1]
-        return
-    callback = copy.deepcopy(API['getUpdates']['result'][-1]['callback_query'])
-    callback['data'] = next(iter(bridge.pending)) + ':yes'
-    if change == 'expired':
-        bridge.clock = lambda: 701
-    elif change == 'text':
-        read.return_value = screen.replace('pytest', 'other command')
-    elif change in ('pane', 'terminal', 'agent'):
-        field = {'pane': 'pane_id', 'terminal': 'terminal_id', 'agent': 'name'}[change]
-        herdr.return_value = {'agents': [dict(agent, **{field: 'different'})]}
-    elif change == 'wrong_chat':
-        callback['from']['id'] = 99
-    elif change == 'paused':
-        bridge.config['paused'] = True
-    bridge.callback(callback)
-    assert all('send-keys' not in call.args for call in herdr.call_args_list)
+    bridge.blocked(dict(live_agent(), name=name))
+    assert 'answer in its pane' in bridge.bot.send.call_args.args[1]
+    assert 'reply_markup' not in bridge.bot.send.call_args.kwargs
+    herdr.assert_not_called()
 
 
 def test_reply_and_off(ville, monkeypatch):
@@ -363,8 +313,11 @@ def test_runtime_backoff_caps_at_sixty(bridge, monkeypatch, capsys):
         if len(delays) == 7:
             raise Finished()
         raise OSError('fixture connection failure')
+    original_sleep = asyncio.sleep
     async def sleep(delay):
-        delays.append(delay)
+        if delay >= 2:
+            delays.append(delay)
+        await original_sleep(0)
     bridge.bot.call.side_effect = call
     monkeypatch.setattr(events, 'EventReader', Reader)
     monkeypatch.setattr(tg.asyncio, 'sleep', sleep)
