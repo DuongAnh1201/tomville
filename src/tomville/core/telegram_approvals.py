@@ -91,30 +91,44 @@ def scan(bridge):
     if bridge.settings.team != 'lead' or bridge.config.get('paused'):
         return
     for file in sorted((bridge.project / approvals.DIRECTORY).glob('*.json')):
-        with approvals.locked(bridge.project, file.stem) as data:
-            if not data:
-                continue
-            if data['status'] == 'pending' and not approvals.active(bridge.project, bridge.settings, data, bridge.approval_clock()):
-                approvals.expire(bridge.project, data)
-            if data['status'] != 'pending':
-                if data.get('issued') and not data.get('closed_notice'):
-                    data['closed_notice'] = True
-                    approvals.write(file, data)
-                    update_messages(bridge, data, 'Expired; no answer accepted' if data['status'] == 'expired' else 'Answered')
-                continue
-            if data.get('issued'):
-                continue
-            data['issued'] = True
-            # Claim before sending: a crash never reissues actionable requests.
-            approvals.write(file, data)
-            for index, (text, markup) in enumerate(issue(bridge, data)):
-                result = bridge.say(text, **({'reply_markup': markup} if markup else {}))
-                data['messages'].append({'id': result['message_id'], 'question': index})
-                approvals.write(file, data)
-            if data['kind'] == 'stop':
-                data['status'] = 'notified'
+        try:
+            scan_request(bridge, file)
+        except TimeoutError as exc:
+            bridge.error('approval scan skipped', exc)
+
+
+def scan_request(bridge, file):
+    close = None
+    with approvals.locked(bridge.project, file.stem, timeout=0) as data:
+        if not data:
+            return
+        if data['status'] == 'pending' and not approvals.active(bridge.project, bridge.settings, data, bridge.approval_clock()):
+            approvals.expire(bridge.project, data)
+        if data['status'] != 'pending':
+            if data.get('issued') and not data.get('closed_notice'):
                 data['closed_notice'] = True
-                approvals.log(bridge.project, data, data['payload']['last_assistant_message'], sender=data['lead'])
+                close = 'Expired; no answer accepted' if data['status'] == 'expired' else 'Answered'
+            else:
+                return
+        elif data.get('issued'):
+            return
+        else:
+            data['issued'] = True  # Claim before I/O; a crash never reissues buttons.
+    if close:
+        update_messages(bridge, data, close)
+        return
+    for index, (text, markup) in enumerate(issue(bridge, data)):
+        result = bridge.say(text, **({'reply_markup': markup} if markup else {}))
+        with approvals.locked(bridge.project, file.stem) as current:
+            current['messages'].append({'id': result['message_id'], 'question': index})
+            if not approvals.active(bridge.project, bridge.settings, current, bridge.approval_clock()):
+                current['closed_notice'] = False
+                return
+    if data['kind'] == 'stop':
+        with approvals.locked(bridge.project, file.stem) as current:
+            if current['status'] == 'pending':
+                current.update(status='notified', closed_notice=True)
+        approvals.log(bridge.project, data, data['payload']['last_assistant_message'], sender=data['lead'])
 
 
 def permitted(bridge, data, message_id):
@@ -130,13 +144,21 @@ def finish(bridge, data, answer):
     approvals.write(approvals.path(bridge.project, data['id']), data)
 
 
+def retry(bridge, data):
+    payload = data['payload']
+    text = 'Tom approved: ' + payload['tool_name'] + ' ' + json.dumps(payload['tool_input'], ensure_ascii=False) + ', retry it'
+    pane = bridge.target_pane(data['lead'])
+    messages.send(bridge.project, data['lead'], text, sender='tom', via='telegram-approval', target=pane,
+                  prompt_prefix=messages.TELEGRAM_PREFIX, process_timeout=10)
+
+
 def callback(bridge, callback):
     token, _, choice = callback.get('data', '').partition(':')
     try:
         approvals.path(bridge.project, token)
     except ValueError:
-        return bridge.bot.call('answerCallbackQuery', callback_query_id=callback['id'], text='expired')
-    answer = 'expired'
+        return
+    answer, retry_data, closed = 'expired', None, None
     with approvals.locked(bridge.project, token) as data:
         if permitted(bridge, data, callback.get('message', {}).get('message_id')):
             kind = data['kind']
@@ -147,17 +169,20 @@ def callback(bridge, callback):
                 finish(bridge, data, {'behavior': choice})
                 answer = 'Left blocked'
                 if choice == 'retry':
-                    payload = data['payload']
-                    text = 'Tom approved: ' + payload['tool_name'] + ' ' + json.dumps(payload['tool_input'], ensure_ascii=False) + ', retry it'
-                    pane = bridge.target_pane(data['lead'])
-                    messages.send(bridge.project, data['lead'], text, sender='tom', via='telegram-approval', target=pane, prompt_prefix=messages.TELEGRAM_PREFIX)
+                    retry_data = data
                     answer = 'Approval sent; the safety check decides on retry'
             elif kind == 'ask-user-question':
                 answer = question_choice(bridge, data, choice)
             if data['status'] == 'answered':
-                update_messages(bridge, data, answer)
                 data['closed_notice'] = True
-    return bridge.bot.call('answerCallbackQuery', callback_query_id=callback['id'], text=answer[:200])
+                closed = data
+    # Decisions are durable and unlocked before any slow side effects.
+    if retry_data:
+        bridge.defer(retry, bridge, retry_data)
+    if closed:
+        bridge.defer(update_messages, bridge, closed, answer)
+    elif answer != 'expired':
+        bridge.defer(bridge.say, escape(answer))
 
 
 def question_choice(bridge, data, choice):
@@ -190,28 +215,32 @@ def question_choice(bridge, data, choice):
 
 
 def reply(bridge, message):
-    """True for replies to hook messages, even expired ones (never forward late answers)."""
+    """Late hook replies are consumed, never forwarded as fresh prompts."""
     message_id = message.get('reply_to_message', {}).get('message_id')
     if message_id is None:
         return False
     for file in (bridge.project / approvals.DIRECTORY).glob('*.json'):
+        closed, notice = None, None
         with approvals.locked(bridge.project, file.stem) as data:
             record = next((m for m in data['messages'] if m['id'] == message_id), None) if data else None
             if not record:
                 continue
             if data['kind'] == 'stop':
-                return False  # Normal replies to a plain-text question go to the lead.
+                return False
             if not permitted(bridge, data, message_id):
-                bridge.say('Expired or already answered; nothing sent')
-                return True
-            if data['kind'] == 'permission-request':
+                notice = 'Expired or already answered; nothing sent'
+            elif data['kind'] == 'permission-request':
                 finish(bridge, data, {'behavior': 'deny', 'reason': message['text']})
-                update_messages(bridge, data, 'Denied with your reason')
                 data['closed_notice'] = True
+                closed = data
             elif data['kind'] == 'ask-user-question':
                 data['selections'][str(record['question'])] = [message['text']]
-                bridge.say('Answer recorded; tap Submit answers when ready')
+                notice = 'Answer recorded; tap Submit answers when ready'
             else:
-                bridge.say('Use Approve, retry or Leave it')
-            return True
+                notice = 'Use Approve, retry or Leave it'
+        if closed:
+            bridge.defer(update_messages, bridge, closed, 'Denied with your reason')
+        if notice:
+            bridge.defer(bridge.say, notice)
+        return True
     return False

@@ -83,7 +83,7 @@ def diagnose(project, settings, config=None):
     add('Board', reader.offline_since is None, f'{len(reader.cards)} cards' if reader.offline_since is None else 'unavailable', 'Check board source, repository or TASKS.md')
     from tomville.core.telegram import health
     telegram_ok, detail = health(settings)
-    add('Telegram', telegram_ok, detail, 'tmv telegram setup')
+    add('Telegram', telegram_ok, detail, 'Check the bot log; restart tmv telegram run' if 'last successful poll' in detail else 'tmv telegram setup')
     add('GitHub watch', True, f'{"enabled" if settings.watch else "off (opt-in)"}; interval {settings.check_seconds:g} seconds ([board] check_seconds; tmv watch works manually)' if settings.source == 'github' else 'not active (board is not GitHub)')
     add('Settings', True, str(config_path(config)))
     return {'checks': checks, 'problems': sum(not c['ok'] and c['required'] for c in checks), 'warnings': sum(not c['ok'] and not c['required'] for c in checks)}

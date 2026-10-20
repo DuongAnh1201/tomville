@@ -1,7 +1,7 @@
 """Claude hooks and the local, one-answer Telegram request queue (no bot token)."""
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime, timezone
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -14,6 +14,8 @@ import time
 from tomville.core import messages, team
 from tomville.core.models import Message
 from tomville.core.questions import question_lines
+
+from tomville.core.locks import file_lock
 from tomville.core.settings import load_settings
 
 DIRECTORY = Path('.tomville/approvals')
@@ -40,18 +42,15 @@ def write(file, data):
 
 
 @contextmanager
-def locked(project, request_id):
+def locked(project, request_id, *, timeout=1):
     file = path(project, request_id)
     file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd = os.open(file.with_suffix('.lock'), os.O_CREAT | os.O_RDWR, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with file_lock(file.with_suffix('.lock'), timeout=timeout):
         data = json.loads(file.read_text()) if file.exists() else None
+        before = deepcopy(data)
         yield data
-        if data is not None:
+        if data is not None and data != before:
             write(file, data)
-    finally:
-        os.close(fd)
 
 
 def log(project, data, text, *, sender='tom'):
