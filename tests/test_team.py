@@ -469,3 +469,22 @@ def test_shutdown_timeout_keeps_owned_pane(runtime, monkeypatch):
     assert rows[0]['result'].startswith('FAILED: shell not ready')
     assert 'worker' in team.load_state(project)['agents']
     assert not any(a == ['herdr', 'pane', 'close', 'worker'] for a, kw in calls)
+
+
+def test_telegram_tab_up_repeat_and_shutdown(runtime):
+    project, calls, agents, panes, tabs = runtime
+    conf = settings(boss=AgentSpec('boss', 'claude', place='here'))
+    conf.telegram['enabled'] = True
+    team.up(project, conf)
+    commands = [a for a, kw in calls if a[1:3] == ['pane', 'run']]
+    assert commands[-1][-1].endswith('telegram run')
+    assert '--label' in next(a for a, kw in calls if 'telegram' in a)
+    assert team.load_state(project)['telegram']['launched']
+    before = len(commands)
+    team.up(project, conf)
+    assert len([a for a, kw in calls if a[1:3] == ['pane', 'run']]) == before
+    team.down(project)
+    assert team.load_state(project)['telegram'] is not None
+    rows = team.down(project, settings=conf, agents=True, confirm=lambda rows: True)
+    assert any(r['agent'] == 'telegram' and r['result'] == 'stopped' for r in rows)
+    assert team.load_state(project)['telegram'] is None

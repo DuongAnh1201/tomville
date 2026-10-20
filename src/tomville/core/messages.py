@@ -96,7 +96,7 @@ def sender_name() -> str | None:
     return next((a.name for a in agents if a.pane_id == pane), None)
 
 
-def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | None = None) -> str:
+def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | None = None, *, sender: str | None = None, via: str = 'send') -> str:
     """Prompt another agent through herdr, then log it. Nothing is logged if herdr refuses."""
     args = ['herdr', 'agent', 'prompt', to, text]
     if wait:
@@ -106,7 +106,7 @@ def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | N
     result = subprocess.run(args, capture_output=True, text=True)
     if result.returncode:
         raise OSError(result.stderr.strip() or result.stdout.strip() or 'herdr agent prompt failed')
-    append(project, Message(datetime.now(timezone.utc), sender_name(), to, text, 'send'))
+    append(project, Message(datetime.now(timezone.utc), sender if sender is not None else sender_name(), to, text, via))
     return result.stdout.strip()
 
 
