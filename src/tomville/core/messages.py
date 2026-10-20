@@ -97,7 +97,7 @@ def sender_name() -> str | None:
     return next((a.name for a in agents if a.pane_id == pane), None)
 
 
-def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | None = None, *, sender: str | None = None, via: str = 'send', target: str | None = None, prompt_prefix: str = '') -> str:
+def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | None = None, *, sender: str | None = None, via: str = 'send', target: str | None = None, prompt_prefix: str = '', process_timeout: float | None = None) -> str:
     """Prompt through herdr, then log the recipient name.
 
     `target` optionally selects a resolved pane; `prompt_prefix` labels delivery
@@ -108,7 +108,7 @@ def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | N
         args.append('--wait')
     if timeout is not None:
         args += ['--timeout', str(timeout)]
-    result = subprocess.run(args, capture_output=True, text=True)
+    result = subprocess.run(args, capture_output=True, text=True, **({'timeout': process_timeout} if process_timeout is not None else {}))
     if result.returncode:
         raise OSError(result.stderr.strip() or result.stdout.strip() or 'herdr agent prompt failed')
     append(project, Message(datetime.now(timezone.utc), sender if sender is not None else sender_name(), to, text, via))

@@ -64,7 +64,7 @@ def test_storage_and_validation(ville):
     for table in ({'token': '123:fake'}, {'enabled': 'true'}, {'from': 'lead'}, {'id': '../../outside'}):
         with pytest.raises(ValueError):
             settings_from_data({'telegram': table})
-    assert tg.health(settings) == (True, '@fixture_bot (paired)')
+    assert tg.health(settings) == (False, '@fixture_bot (paired); last successful poll: never')
     tg.config_path('fixture123').unlink()
     assert not tg.health(settings)[0]
     assert tg.health(settings_from_data({})) == (True, 'not set up (optional)')
@@ -106,7 +106,7 @@ def message(text):
 
 def test_routing_and_rejections(bridge):
     bridge.handle(message('hello lead'))
-    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello lead', sender='tom', via='telegram', target='pane-claude', prompt_prefix='📱 Tom (Telegram): ')
+    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello lead', sender='tom', via='telegram', target='pane-claude', prompt_prefix='📱 Tom (Telegram): ', process_timeout=10)
     bridge.handle(message('/codex_1 test'))
     assert tg.messages.send.call_args.args[1:3] == ('codex-1', 'test')
     assert tg.messages.send.call_args.kwargs['prompt_prefix'] == '📱 Tom (Telegram): '
@@ -250,6 +250,7 @@ def test_async_runtime_replays_poll_and_live_events(bridge, monkeypatch):
 def test_cli_telegram_status_and_pause(ville, capsys):
     from tomville.cli import main
     project, settings, _ = ville
+    tg.change_config(settings, last_poll=tg.time.time())
     assert main(['-C', str(project), 'telegram', 'status']) == 0
     assert 'paired' in capsys.readouterr().out
     assert main(['-C', str(project), 'telegram', 'pause']) == 0
@@ -271,6 +272,8 @@ def test_runtime_persists_offset_before_forwarding(bridge, monkeypatch):
     import asyncio
     from tomville.core import events
     delivered = []
+    import threading
+    sent = threading.Event()
     class Finished(Exception):
         pass
     class Reader:
@@ -286,11 +289,13 @@ def test_runtime_persists_offset_before_forwarding(bridge, monkeypatch):
             polls += 1
             if polls == 1:
                 return [message('hello')]
+            assert sent.wait(2), 'ordinary delivery must run independently'
             raise Finished()
         return True
     bridge.bot.call.side_effect = call
     def send(*args, **kw):
         delivered.append(tg.load_config(bridge.settings)['offset'])
+        sent.set()
     monkeypatch.setattr(tg.messages, 'send', send)
     monkeypatch.setattr(events, 'EventReader', Reader)
     with pytest.raises(Finished):
@@ -337,7 +342,7 @@ def test_routes_to_recorded_unnamed_lead_pane(bridge, monkeypatch):
     tg.team.save_state(bridge.project, {'agents': {}, 'lead_pane': lead['pane_id']})
     monkeypatch.setattr(tg.team, 'herdr', Mock(return_value={'agents': agents}))
     bridge.handle(message('hello unnamed lead'))
-    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello unnamed lead', sender='tom', via='telegram', target=lead['pane_id'], prompt_prefix='📱 Tom (Telegram): ')
+    tg.messages.send.assert_called_once_with(bridge.project, 'claude', 'hello unnamed lead', sender='tom', via='telegram', target=lead['pane_id'], prompt_prefix='📱 Tom (Telegram): ', process_timeout=10)
     assert 'Sent to <b>claude</b>' in bridge.bot.send.call_args.args[1]
 
 
@@ -443,7 +448,7 @@ def test_ipv6_stall_falls_back_and_future_calls_prefer_ipv4(monkeypatch):
     bot.call('sendMessage', chat_id=42, text='two')
     assert [sock.family for sock in sockets] == [socket.AF_INET6, socket.AF_INET, socket.AF_INET]
     assert sockets[0].timeouts == [1] and sockets[0].closed
-    assert sockets[1].timeouts == [40, 40]  # preserve long-poll read timeout
+    assert sockets[1].timeouts == [10, 10]  # bounded non-poll Bot API request
     assert handler.prefer_ipv4
 
 
@@ -535,3 +540,66 @@ def test_plain_phone_prefix_is_delivered_but_not_added_to_log(bridge, monkeypatc
     entry = json.loads((bridge.project / '.tomville/messages.jsonl').read_text())
     assert entry['text'] == 'Please check this\nand report back'
     assert (entry['from'], entry['to'], entry['via']) == ('tom', 'claude', 'telegram')
+
+
+def test_poll_heartbeat_status_and_doctor_staleness(ville, monkeypatch, capsys):
+    from tomville.core import doctor, events
+    project, settings, config = ville
+    now = tg.time.time()
+    tg.change_config(settings,last_poll=now)
+    ok, detail = tg.health(settings,clock=lambda:now+120)
+    assert ok and 'last successful poll:' in detail and '120s ago' in detail
+    ok, detail = tg.health(settings,clock=lambda:now+121)
+    assert not ok and '121s ago' in detail
+    # Doctor uses the same fresh/stale result and provides a bot restart hint.
+    tg.change_config(settings,last_poll=now-121)
+    settings.agents, settings.pets, settings.lead = {}, {}, None
+    async def agents(): return []
+    monkeypatch.setattr(doctor,'agent_list',agents)
+    monkeypatch.setattr(doctor,'run_command',lambda *a: '[]')
+    monkeypatch.setattr(events.EventReader,'update_board',lambda self: [])
+    result = doctor.diagnose(project,settings)
+    row = next(r for r in result['checks'] if r['name']=='Telegram')
+    assert not row['ok'] and 'last successful poll' in row['detail']
+    assert 'tmv telegram run' in row['fix']
+    assert result['warnings'] >= 1
+
+
+def test_slow_loop_iteration_logs_heartbeat(bridge, monkeypatch, capsys):
+    import asyncio
+    from tomville.core import events
+    now = [0]
+    bridge.clock = lambda:now[0]
+    class Finished(Exception): pass
+    class Reader:
+        agents, cards = {}, {}
+        def __init__(self,*args): pass
+        async def run(self, emit): await asyncio.Event().wait()
+    polls = [0]
+    def call(method,**kw):
+        if method == 'getUpdates':
+            polls[0] += 1
+            if polls[0] == 1:
+                now[0] = 31
+                return []
+            raise Finished()
+        return True
+    bridge.bot.call.side_effect = call
+    monkeypatch.setattr(events,'EventReader',Reader)
+    async def run():
+        async with asyncio.timeout(3): await tg._run(bridge)
+    with pytest.raises(Finished): asyncio.run(run())
+    assert 'slow poll iteration: 31.0 seconds (over 30 seconds)' in capsys.readouterr().err
+    assert tg.load_config(bridge.settings)['last_poll'] > 0
+
+
+def test_bot_api_deadlines_are_short_except_long_poll():
+    calls = []
+    def opener(request, timeout):
+        calls.append(timeout)
+        return io.BytesIO(json.dumps(API['sendMessage']).encode())
+    bot = tg.Bot('123:fake',opener)
+    bot.call('sendMessage')
+    bot.call('getUpdates',timeout=20)
+    bot.call('answerCallbackQuery',_io_timeout=3)
+    assert calls == [10,30,3]

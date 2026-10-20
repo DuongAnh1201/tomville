@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from dataclasses import asdict
 from datetime import datetime, timezone
 from html import escape
@@ -28,6 +30,7 @@ import tomli_w
 
 from tomville.core import messages, team, telegram_approvals
 from tomville.core.models import Message
+from tomville.core.locks import file_lock
 from tomville.core.settings import load_settings, read_toml
 from tomville.core.ville import has_ville, update_ville
 from tomville.core.telegram_text import chunks, diff_messages, parse_diff, pr_diff
@@ -64,10 +67,11 @@ def load_config(settings):
 
 def change_config(settings, **updates):
     # Reload before writing so offset updates do not overwrite CLI pause/resume.
-    data = load_config(settings)
-    data.update(updates)
-    save_config(settings.telegram['id'], data)
-    return data
+    with file_lock(config_path(settings.telegram['id']).with_suffix('.update.lock')):
+        data = load_config(settings)
+        data.update(updates)
+        save_config(settings.telegram['id'], data)
+        return data
 
 
 @contextmanager
@@ -154,11 +158,11 @@ class Bot:
         self.token = token
         self.opener = opener if opener is not None else urllib.request.build_opener(TelegramHTTPSHandler()).open
 
-    def call(self, method, **params):
+    def call(self, method, *, _io_timeout=None, **params):
         request = urllib.request.Request('https://api.telegram.org/bot' + self.token + '/' + method,
                                          data=json.dumps(params).encode(), headers={'Content-Type': 'application/json'})
         try:
-            with self.opener(request, timeout=40) as response:
+            with self.opener(request, timeout=_io_timeout or (30 if method == 'getUpdates' else 10)) as response:
                 result = json.load(response)
         except urllib.error.HTTPError as exc:
             try:
@@ -176,7 +180,10 @@ class Bot:
     def send(self, chat_id, text, **params):
         result = None
         parts = chunks(text)
+        deadline = time.monotonic() + 30
         for index, part in enumerate(parts):
+            if time.monotonic() >= deadline:
+                raise TimeoutError('Telegram send exceeded 30 seconds')
             options = params if index == len(parts) - 1 else {k: v for k, v in params.items() if k != 'reply_markup'}
             result = self.call('sendMessage', chat_id=chat_id, text=part, parse_mode='HTML', **options)
         return result
@@ -251,6 +258,15 @@ class Bridge:
         self.clock, self.approval_clock = clock, time.time
         self.routes = agent_commands(settings)
 
+    def defer(self, function, *args):
+        function(*args)
+
+    def acknowledge(self, callback):
+        try:
+            self.bot.call('answerCallbackQuery', callback_query_id=callback['id'], text='Received', _io_timeout=3)
+        except OSError as exc:
+            self.error('callback acknowledgement failed', exc)
+
     def log(self, target, text, via='telegram', sender='tom'):
         messages.append(self.project, Message(datetime.now(timezone.utc), sender, target, text, via))
 
@@ -263,7 +279,7 @@ class Bridge:
         return text
 
     def target_pane(self, target):
-        agents = team.herdr(self.project, 'agent', 'list')['agents']
+        agents = team.herdr(self.project, 'agent', 'list', timeout=10)['agents']
         state = team.load_state(self.project)
         lead = target == self.settings.lead or target == state.get('lead_spec')
         record = ({'pane': state.get('lead_pane'), 'terminal': state.get('lead_terminal'), 'kind': state.get('lead_kind')}
@@ -344,7 +360,7 @@ class Bridge:
             return self.say('Include a message after the command')
         try:
             pane = self.target_pane(target)
-            messages.send(self.project, target, text, sender='tom', via='telegram', target=pane, prompt_prefix=messages.TELEGRAM_PREFIX)
+            messages.send(self.project, target, text, sender='tom', via='telegram', target=pane, prompt_prefix=messages.TELEGRAM_PREFIX, process_timeout=10)
         except team.ERRORS as exc:
             reason = self.error("couldn't reach " + target, exc, target)
             try:
@@ -359,6 +375,8 @@ class Bridge:
             return self.say('🤖 tomville: ' + escape(agent['name']) + ' is waiting; answer in its pane')
 
     def callback(self, callback):
+        if not callback.get('_acknowledged'):
+            self.acknowledge(callback)
         message = callback.get('message', {})
         candidate = dict(message, **{'from': callback.get('from', {})})
         if not trusted(candidate, self.config['chat_id']):
@@ -376,90 +394,153 @@ def run(project, settings, *, bot_factory=Bot):
         asyncio.run(_run(bridge))
 
 
-async def _run(bridge):
-    """Read live herdr events while Telegram long polls independently.
+async def _run(bridge, *, worker_timeout=30):
+    """Keep polling/decisions independent of slow notification and delivery lanes.
 
-    Serialize notifications and updates so approval issuance and consumption cannot
-    interleave. EventReader suppresses initial snapshots and owns its fallback.
+    Executor lanes have one worker each, bounded awaits and no unbounded queue of
+    timed-out work. File locks serialize only local request/config transitions.
     """
     from tomville.core.events import EventReader
     reader = EventReader(bridge.project, bridge.settings)
     reader.snapshot = lambda agents, cards: None
     bridge.live_reader = reader
-    queue = asyncio.Queue()
-    guard = asyncio.Lock()
+    queue, actions = asyncio.Queue(), asyncio.Queue()
+    pools, inflight = {}, {}
+    loop = asyncio.get_running_loop()
 
     def refresh():
         current = load_settings(bridge.project)
         if not current.telegram['enabled']:
             return False
-        bridge.settings = current
-        bridge.config = load_config(current)
+        bridge.settings, bridge.config = current, load_config(current)
         return True
 
-    async def poll():
-        backoff = 2
-        menu_set = False
+    def heartbeat(label, started):
+        elapsed = bridge.clock() - started
+        if elapsed > 30:
+            bridge.error('slow ' + label + ' iteration', OSError(f'{elapsed:.1f} seconds (over 30 seconds)'))
+
+    async def work(lane, function, *args, deadline=None, **kwargs):
+        if lane in inflight and not inflight[lane].done():
+            raise TimeoutError(lane + ' worker is still busy after timeout')
+        if lane not in pools:
+            pools[lane] = ThreadPoolExecutor(max_workers=1, thread_name_prefix='telegram-' + lane)
+        pool = pools[lane]
+        future = inflight[lane] = pool.submit(partial(function, *args, **kwargs))
+        async with asyncio.timeout(worker_timeout if deadline is None else deadline):
+            return await asyncio.wrap_future(future)
+
+    def defer(function, *args):
+        loop.call_soon_threadsafe(actions.put_nowait, (function, args))
+
+    old_defer, bridge.defer = bridge.defer, defer
+
+    async def deliver():
         while True:
-            async with guard:
+            if 'delivery' in inflight and not inflight['delivery'].done():
+                await asyncio.sleep(.1)
+                continue
+            function, args = await actions.get()
+            started = bridge.clock()
+            try:
+                await work('delivery', function, *args, deadline=35)
+            except team.ERRORS as exc:
+                bridge.error('delivery failed', exc)
+            finally:
+                heartbeat('delivery', started)
+
+    async def poll():
+        backoff, menu_set = 2, False
+        while True:
+            started = bridge.clock()
+            try:
                 if not refresh():
                     return
-                offset = bridge.config.get('offset', 0)
-            try:
                 if not menu_set:
-                    await asyncio.to_thread(bridge.bot.call, 'setMyCommands', commands=[{'command': c, 'description': d} for c, d in COMMANDS.items()] +
-                                            [{'command': c, 'description': 'Message ' + a} for c, a in bridge.routes.items()])
+                    await work('poll', bridge.bot.call, 'setMyCommands', deadline=12,
+                               commands=[{'command': c, 'description': d} for c, d in COMMANDS.items()] +
+                               [{'command': c, 'description': 'Message ' + a} for c, a in bridge.routes.items()])
                     menu_set = True
-                updates = await asyncio.to_thread(bridge.bot.call, 'getUpdates', offset=offset, timeout=20, allowed_updates=['message', 'callback_query'])
+                updates = await work('poll', bridge.bot.call, 'getUpdates', deadline=35,
+                                     offset=bridge.config.get('offset', 0), allowed_updates=['message', 'callback_query'],
+                                     **{'timeout': 20})
+                # Acknowledge and apply callbacks before any ordinary message work.
+                updates.sort(key=lambda update: 'callback_query' not in update)
+                if not updates:
+                    bridge.config = change_config(bridge.settings, last_poll=time.time())
                 for update in updates:
-                    async with guard:
-                        if not refresh():
-                            return
-                        # At-most-once delivery: never replay prompts or keys after a crash.
-                        bridge.config = change_config(bridge.settings, offset=update['update_id'] + 1)
+                    callback = update.get('callback_query')
+                    if callback:
                         try:
-                            await asyncio.to_thread(bridge.handle, update)
-                        except (OSError, ValueError) as exc:
-                            reason = bridge.error('update failed', exc)
-                            await asyncio.to_thread(bridge.say, escape(reason))
+                            await work('ack', bridge.acknowledge, callback, deadline=4)
+                        except team.ERRORS as exc:
+                            bridge.error('callback acknowledgement failed', exc)
+                        update = dict(update, callback_query=dict(callback, _acknowledged=True))
+                    if not refresh():
+                        return
+                    # Preserve a monotonic offset even when callbacks reorder a batch.
+                    bridge.config = change_config(bridge.settings, last_poll=time.time(),
+                                                  offset=max(bridge.config.get('offset', 0), update['update_id'] + 1))
+                    try:
+                        if callback:
+                            await work('decision', bridge.handle, update, deadline=3)
+                        else:
+                            defer(bridge.handle, update)
+                    except team.ERRORS as exc:
+                        reason = bridge.error('update failed', exc)
+                        defer(bridge.say, escape(reason))
                 backoff = 2
-            except OSError as exc:
+            except team.ERRORS as exc:
                 bridge.error('poll failed', exc)
+                heartbeat('poll', started)
                 await asyncio.sleep(backoff)
                 backoff = min(60, backoff * 2)
+            else:
+                heartbeat('poll', started)
 
     async def notify():
         from tomville.core.models import AgentStatusChanged, CardChanged
         while True:
+            if 'notify' in inflight and not inflight['notify'].done():
+                await asyncio.sleep(.1)
+                continue
             event = await queue.get()
-            async with guard:
+            started = bridge.clock()
+            try:
                 if not refresh():
                     return
                 if bridge.config.get('paused') or bridge.settings.team != 'lead':
                     continue
-                try:
-                    if isinstance(event, AgentStatusChanged) and event.new == 'blocked':
-                        agent = next((a for a in reader.agents.values() if a.name == event.name and (a.name in bridge.settings.agents or a.name == bridge.settings.lead)), None)
-                        if agent:
-                            await asyncio.to_thread(bridge.blocked, asdict(agent))
-                    elif isinstance(event, CardChanged) and event.old_column is not None and event.card.column in ('review', 'done') and event.old_column != event.card.column:
-                        card = event.card
-                        await asyncio.to_thread(bridge.say, '🤖 tomville: ' + escape(f'{card.id} → {card.column}: {card.title}'))
-                except OSError as exc:
-                    bridge.error('notification failed', exc)
+                if isinstance(event, AgentStatusChanged) and event.new == 'blocked':
+                    agent = next((a for a in reader.agents.values() if a.name == event.name and
+                                  (a.name in bridge.settings.agents or a.name == bridge.settings.lead)), None)
+                    if agent:
+                        await work('notify', bridge.blocked, asdict(agent))
+                elif isinstance(event, CardChanged) and event.old_column is not None and event.card.column in ('review', 'done') and event.old_column != event.card.column:
+                    await work('notify', bridge.say, '🤖 tomville: ' + escape(f'{event.card.id} → {event.card.column}: {event.card.title}'))
+            except team.ERRORS as exc:
+                bridge.error('notification failed', exc)
+            finally:
+                heartbeat('notification', started)
 
     async def approvals_loop():
         while True:
-            async with guard:
+            if 'scan' in inflight and not inflight['scan'].done():
+                await asyncio.sleep(.1)
+                continue
+            started = bridge.clock()
+            try:
                 if not refresh():
                     return
-                try:
-                    await asyncio.to_thread(telegram_approvals.scan, bridge)
-                except (OSError, ValueError, KeyError, TypeError) as exc:
-                    bridge.error('hook request failed', exc)
+                await work('scan', telegram_approvals.scan, bridge)
+            except team.ERRORS as exc:
+                bridge.error('hook request failed', exc)
+            finally:
+                heartbeat('approval scan', started)
             await asyncio.sleep(1)
 
-    tasks = [asyncio.create_task(approvals_loop()), asyncio.create_task(reader.run(queue.put_nowait)), asyncio.create_task(poll()), asyncio.create_task(notify())]
+    tasks = [asyncio.create_task(deliver()), asyncio.create_task(approvals_loop()),
+             asyncio.create_task(reader.run(queue.put_nowait)), asyncio.create_task(poll()), asyncio.create_task(notify())]
     try:
         done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
@@ -472,6 +553,9 @@ async def _run(bridge):
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        bridge.defer = old_defer
+        for pool in pools.values():
+            pool.shutdown(wait=False, cancel_futures=True)
 
 
 def reply(project, settings, text=None, *, diff=None, diff_file=None, bot_factory=Bot):
@@ -535,11 +619,17 @@ def off(project, settings, confirm):
     return True
 
 
-def health(settings):
+def health(settings, *, clock=time.time):
     if not settings.telegram['enabled']:
         return True, 'not set up (optional)'
     try:
         config = load_config(settings)
     except (ValueError, OSError):
         return False, 'enabled but token or pairing missing'
-    return True, settings.telegram['bot'] + (' (paused)' if config.get('paused') else ' (paired)')
+    detail = settings.telegram['bot'] + (' (paused)' if config.get('paused') else ' (paired)')
+    last = config.get('last_poll')
+    if not isinstance(last, (int, float)) or isinstance(last, bool):
+        return False, detail + '; last successful poll: never'
+    stamp = datetime.fromtimestamp(last, timezone.utc).isoformat(timespec='seconds')
+    age = max(0, clock() - last)
+    return age <= 120, detail + f'; last successful poll: {stamp} ({age:.0f}s ago)'

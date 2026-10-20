@@ -192,7 +192,7 @@ def test_safety_block_notice_and_retry_is_toms_message(bridge, choice):
     if choice == 'retry':
         tg.messages.send.assert_called_once()
         assert tg.messages.send.call_args.args[2].startswith('Tom approved: Bash')
-        assert tg.messages.send.call_args.kwargs == {'sender':'tom','via':'telegram-approval','target':'lead-pane','prompt_prefix':'📱 Tom (Telegram): '}
+        assert tg.messages.send.call_args.kwargs == {'sender':'tom','via':'telegram-approval','target':'lead-pane','prompt_prefix':'📱 Tom (Telegram): ','process_timeout':10}
     else: tg.messages.send.assert_not_called()
 
 
@@ -355,7 +355,7 @@ def test_non_lead_runtime_drops_all_events_and_hook_notices(bridge, monkeypatch)
                 while not handled.is_set(): await asyncio.sleep(.01)
     def call(method, **kwargs):
         if method == 'getUpdates':
-            if not handled.is_set():
+            if not handled.is_set() and kwargs.get('offset',0) == 0:
                 return [{'update_id':1,'message':{'from':{'id':42},'chat':{'id':42,'type':'private'},'text':'hi'}}]
             return []
         return True
@@ -437,3 +437,200 @@ def test_middle_question_still_requires_lead_and_telegram(bridge, monkeypatch, c
     ta.scan(bridge)
     bridge.bot.send.assert_not_called()
     assert output.getvalue() == ''
+
+@pytest.mark.parametrize('slow', ['send', 'herdr'])
+def test_runtime_applies_taps_while_slow_io_is_outstanding(bridge, monkeypatch, slow):
+    import asyncio
+    import threading
+    from tomville.core import events
+    request = submit(bridge)
+    ta.scan(bridge)
+    current = read(bridge,request)
+    callback = {'update_id':20,'callback_query':{'id':'fast-tap','from':{'id':42},
+        'data':request['id'] + ':allow','message':{'message_id':current['messages'][0]['id'],
+        'chat':{'id':42,'type':'private'}}}}
+    started, release, acknowledged = threading.Event(), threading.Event(), threading.Event()
+    if slow == 'send':
+        submit(bridge,'permission-denied')
+        def send(*args, **kwargs):
+            started.set()
+            assert release.wait(2), 'tap decision must not wait for outbound send'
+            return {'message_id':200}
+        bridge.bot.send.side_effect = send
+    else:
+        def target(_):
+            started.set()
+            assert release.wait(2), 'tap decision must not wait for herdr'
+            return 'lead-pane'
+        bridge.target_pane.side_effect = target
+    calls = []
+    def call(method, **kwargs):
+        calls.append(method)
+        if method == 'answerCallbackQuery':
+            acknowledged.set()
+            return True
+        if method == 'getUpdates':
+            if slow == 'herdr' and calls.count('getUpdates') == 1:
+                return [{'update_id':10,'message':{'from':{'id':42},'chat':{'id':42,'type':'private'},'text':'slow message'}}]
+            assert started.wait(2)
+            return [callback] if calls.count('getUpdates') == (2 if slow == 'herdr' else 1) else []
+        return True
+    bridge.bot.call.side_effect = call
+    class Reader:
+        agents, cards = {}, {}
+        def __init__(self,*args): pass
+        async def run(self, emit):
+            async with asyncio.timeout(2):
+                while read(bridge,request)['status'] != 'answered':
+                    await asyncio.sleep(.005)
+            assert acknowledged.is_set()
+            assert not release.is_set()
+            release.set()
+    monkeypatch.setattr(events,'EventReader',Reader)
+    monkeypatch.setattr(tg,'load_config',lambda settings:bridge.config)
+    monkeypatch.setattr(tg,'change_config',lambda settings,**kw:dict(bridge.config,**kw))
+    async def run():
+        async with asyncio.timeout(3): await tg._run(bridge)
+    try:
+        asyncio.run(run())
+    finally:
+        release.set()
+    assert read(bridge,request)['answer']['behavior'] == 'allow'
+    assert bridge.config['offset'] == 21
+    assert bridge.config['last_poll'] > 0
+
+
+def test_callback_ack_failure_is_nonfatal_and_precedes_decision(bridge):
+    data = submit(bridge)
+    ta.scan(bridge)
+    def call(method, **kwargs):
+        if method == 'answerCallbackQuery':
+            assert read(bridge,data)['status'] == 'pending'
+            raise OSError('query is too old')
+        # Even edits happen after the request lock has been released.
+        with ap.locked(bridge.project,data['id'],timeout=0) as current:
+            assert current['status'] == 'answered'
+        return True
+    bridge.bot.call.side_effect = call
+    tap(bridge,data,'allow')
+    assert read(bridge,data)['answer']['behavior'] == 'allow'
+    assert 'acknowledgement failed' in (bridge.project/'.tomville/messages.jsonl').read_text()
+
+
+def test_scan_sends_without_request_file_lock(bridge):
+    data = submit(bridge)
+    def send(*args, **kwargs):
+        with ap.locked(bridge.project,data['id'],timeout=0) as current:
+            assert current['issued']
+        return {'message_id':100}
+    bridge.bot.send.side_effect = send
+    ta.scan(bridge)
+    assert read(bridge,data)['messages'] == [{'id':100,'question':0}]
+
+
+def test_busy_file_lock_has_deadline_and_scan_skips_it(bridge):
+    data = submit(bridge)
+    with ap.locked(bridge.project,data['id']):
+        with pytest.raises(TimeoutError,match='file lock timed out'):
+            with ap.locked(bridge.project,data['id'],timeout=0): pass
+        ta.scan(bridge)
+    bridge.bot.send.assert_not_called()
+    ta.scan(bridge)
+    bridge.bot.send.assert_called_once()
+
+
+def test_timed_out_scan_does_not_fill_workers_or_block_decisions(bridge, monkeypatch):
+    import asyncio
+    import threading
+    from tomville.core import events
+    request = submit(bridge)
+    ta.scan(bridge)
+    current = read(bridge,request)
+    started, timed_out, release = threading.Event(), threading.Event(), threading.Event()
+    scans = []
+    def scan(_):
+        scans.append(1)
+        started.set()
+        assert release.wait(2)
+    original_error = bridge.error
+    def error(context, exception, *args):
+        if context == 'hook request failed' and isinstance(exception,TimeoutError): timed_out.set()
+        return original_error(context,exception,*args)
+    bridge.error = error
+    callback = {'update_id':1,'callback_query':{'id':'timed-out-scan-tap','from':{'id':42},'data':request['id']+':allow',
+        'message':{'message_id':current['messages'][0]['id'],'chat':{'id':42,'type':'private'}}}}
+    sent = [False]
+    def call(method,**kwargs):
+        if method == 'getUpdates' and not sent[0]:
+            assert started.wait(1) and timed_out.wait(1)
+            sent[0] = True
+            return [callback]
+        return [] if method == 'getUpdates' else True
+    bridge.bot.call.side_effect = call
+    class Reader:
+        agents, cards = {}, {}
+        def __init__(self,*args): pass
+        async def run(self,emit):
+            async with asyncio.timeout(2):
+                while read(bridge,request)['status'] != 'answered': await asyncio.sleep(.005)
+            release.set()
+    monkeypatch.setattr(events,'EventReader',Reader)
+    monkeypatch.setattr(tg.telegram_approvals,'scan',scan)
+    monkeypatch.setattr(tg,'load_config',lambda settings:bridge.config)
+    monkeypatch.setattr(tg,'change_config',lambda settings,**kw:dict(bridge.config,**kw))
+    async def run():
+        async with asyncio.timeout(3): await tg._run(bridge,worker_timeout=.02)
+    try: asyncio.run(run())
+    finally: release.set()
+    assert len(scans) == 1
+    assert read(bridge,request)['answer']['behavior'] == 'allow'
+
+
+def test_callbacks_precede_ordinary_batch_messages_and_offset_never_rewinds(bridge, monkeypatch):
+    import asyncio
+    import threading
+    from tomville.core import events
+    request = submit(bridge)
+    ta.scan(bridge)
+    current = read(bridge,request)
+    delivered = threading.Event()
+    callback = {'update_id':2,'callback_query':{'id':'priority','from':{'id':42},'data':request['id']+':allow',
+        'message':{'message_id':current['messages'][0]['id'],'chat':{'id':42,'type':'private'}}}}
+    ordinary = {'update_id':1,'message':{'from':{'id':42},'chat':{'id':42,'type':'private'},'text':'later'}}
+    order, polls = [], []
+    def call(method,**kwargs):
+        if method == 'answerCallbackQuery': order.append('ack')
+        if method == 'getUpdates':
+            polls.append(kwargs['offset'])
+            return [ordinary, callback] if len(polls)==1 else []
+        return True
+    bridge.bot.call.side_effect = call
+    def send(*args,**kwargs):
+        assert read(bridge,request)['answer']['behavior'] == 'allow'
+        order.append('message')
+        delivered.set()
+    tg.messages.send.side_effect = send
+    class Reader:
+        agents, cards = {}, {}
+        def __init__(self,*args): pass
+        async def run(self,emit):
+            async with asyncio.timeout(2):
+                while not delivered.is_set(): await asyncio.sleep(.005)
+    monkeypatch.setattr(events,'EventReader',Reader)
+    monkeypatch.setattr(tg,'load_config',lambda settings:bridge.config)
+    monkeypatch.setattr(tg,'change_config',lambda settings,**kw:dict(bridge.config,**kw))
+    async def run():
+        async with asyncio.timeout(3): await tg._run(bridge)
+    asyncio.run(run())
+    assert order == ['ack','message'] and bridge.config['offset'] == 3
+    assert polls[0] == 0 and all(offset == 3 for offset in polls[1:])
+
+
+def test_read_only_queue_scans_do_not_rewrite_request_history(bridge, monkeypatch):
+    data = submit(bridge)
+    ta.scan(bridge)
+    write = Mock(wraps=ap.write)
+    monkeypatch.setattr(ap,'write',write)
+    ta.scan(bridge)
+    assert read(bridge,data)['issued']
+    write.assert_not_called()
