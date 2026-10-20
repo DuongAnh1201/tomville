@@ -111,6 +111,14 @@ def test_failed_detection_keeps_ownership_continues_and_does_not_duplicate(runti
     assert len([a for a, kw in calls if a[1:3] == ['tab', 'create']]) == before
 
 
+def test_up_reports_running_agent_waiting_for_answer_as_running_not_failed(runtime):
+    project, calls, agents, panes, tabs = runtime
+    agents.append({'name': 'secretary', 'agent': 'claude', 'agent_status': 'blocked', 'pane_id': 'p1'})
+    rows = team.up(project, settings(secretary=AgentSpec('secretary', 'claude')))
+    assert rows[0]['result'] == 'already running (waiting for an answer)'
+    assert not any(a[1:3] == ['agent', 'start'] for a, kw in calls)
+
+
 def test_open_existing_worktree_and_split(runtime, monkeypatch):
     project, calls, agents, panes, tabs = runtime
     original = team.run_command

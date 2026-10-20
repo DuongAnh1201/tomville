@@ -215,13 +215,16 @@ def up(project, settings):
             if not caller and name == lead_spec and lead != name:
                 live = next((a for a in agents if agent_name(a) == lead), live)
             if live:
-                if live.get('agent_status') == 'blocked' or not live.get('agent'):
+                if not live.get('agent'):
                     pane = live['pane_id']
-                    raise OSError('blocked at startup' if live.get('agent_status') == 'blocked' else 'agent not detected')
+                    raise OSError('agent not detected')
                 if name in (lead, lead_spec):
                     lead_pane = live['pane_id']
                     state.update(lead_pane=lead_pane, lead_terminal=live.get('terminal_id'), lead_kind=live.get('agent'))
                     save_state(project, state)
+                if live.get('agent_status') == 'blocked':
+                    rows.append(dict(agent=name, place=spec.place, pane=live['pane_id'], result='already running (waiting for an answer)'))
+                    continue
                 owned = state['agents'].get(name)
                 if owned and owned['pane'] == live['pane_id'] and not owned.get('prompt_sent'):
                     run_command(['tmv', '-C', str(project), 'send', name, first_prompt(spec, lead, settings.agents, project)], project)
