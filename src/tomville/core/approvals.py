@@ -70,12 +70,30 @@ def active(project, settings, data, now):
             and (data['kind'] not in ('permission-request', 'ask-user-question') or settings.telegram['approvals']))
 
 
+def request_summary(kind, payload):
+    def brief(text, limit=240):
+        text = ' '.join(text.split())
+        return text if len(text) <= limit else text[:limit - 1] + '…'
+
+    if kind == 'stop':
+        lines = payload.get('last_assistant_message', '').splitlines()
+        return brief(lines[0] if lines else '', 480)
+    inputs = payload.get('tool_input', {})
+    if kind == 'ask-user-question':
+        return brief('; '.join(q['question'] for q in inputs.get('questions', [])), 480)
+    action = inputs.get('command') or inputs.get('file_path') or inputs.get('path') or inputs.get('url') or ''
+    summary = brief(payload.get('tool_name', 'Unknown tool') + (': ' + action if action else ''))
+    if kind == 'permission-denied':
+        summary += ' — ' + brief(payload.get('reason', 'Unknown reason'))
+    return summary
+
+
 def submit(project, settings, pane, kind, payload, now):
     request_id = secrets.token_hex(12)
     data = dict(id=request_id, kind=kind, status='pending', created=now, deadline=now + TIMEOUT,
                 lead=settings.lead, pane=pane, payload=payload, messages=[], selections={})
     write(path(project, request_id), data)
-    log(project, data, 'Requested ' + kind + ': ' + json.dumps(payload, ensure_ascii=False), sender=settings.lead)
+    log(project, data, 'Requested ' + kind + ': ' + request_summary(kind, payload), sender=settings.lead)
     return data
 
 

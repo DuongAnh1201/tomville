@@ -344,7 +344,7 @@ class Bridge:
             return self.say('Include a message after the command')
         try:
             pane = self.target_pane(target)
-            messages.send(self.project, target, text, sender='tom', via='telegram', target=pane)
+            messages.send(self.project, target, text, sender='tom', via='telegram', target=pane, prompt_prefix=messages.TELEGRAM_PREFIX)
         except team.ERRORS as exc:
             reason = self.error("couldn't reach " + target, exc, target)
             try:

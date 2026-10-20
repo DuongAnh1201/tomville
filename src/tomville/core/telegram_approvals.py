@@ -142,7 +142,7 @@ def callback(bridge, callback):
                     payload = data['payload']
                     text = 'Tom approved: ' + payload['tool_name'] + ' ' + json.dumps(payload['tool_input'], ensure_ascii=False) + ', retry it'
                     pane = bridge.target_pane(data['lead'])
-                    messages.send(bridge.project, data['lead'], text, sender='tom', via='telegram-approval', target=pane)
+                    messages.send(bridge.project, data['lead'], text, sender='tom', via='telegram-approval', target=pane, prompt_prefix=messages.TELEGRAM_PREFIX)
                     answer = 'Approval sent; the safety check decides on retry'
             elif kind == 'ask-user-question':
                 answer = question_choice(bridge, data, choice)

@@ -192,7 +192,7 @@ def test_safety_block_notice_and_retry_is_toms_message(bridge, choice):
     if choice == 'retry':
         tg.messages.send.assert_called_once()
         assert tg.messages.send.call_args.args[2].startswith('Tom approved: Bash')
-        assert tg.messages.send.call_args.kwargs == {'sender':'tom','via':'telegram-approval','target':'lead-pane'}
+        assert tg.messages.send.call_args.kwargs == {'sender':'tom','via':'telegram-approval','target':'lead-pane','prompt_prefix':'📱 Tom (Telegram): '}
     else: tg.messages.send.assert_not_called()
 
 
@@ -358,3 +358,36 @@ def test_non_lead_runtime_drops_all_events_and_hook_notices(bridge, monkeypatch)
     asyncio.run(run())
     assert bridge.bot.send.call_count == 1
     assert 'pipeline team yet' in bridge.bot.send.call_args.args[1]
+
+
+@pytest.mark.parametrize('kind,tool,inputs,expected', [
+    ('permission-request','Bash',{'command':'uv run pytest'},'Bash: uv run pytest'),
+    ('permission-request','Edit',{'file_path':'app.py','old_string':'old','new_string':'new'},'Edit: app.py'),
+    ('permission-request','Write',{'file_path':'new.py','content':'not a log summary'},'Write: new.py'),
+    ('ask-user-question',None,None,'Which framework?; Which checks?'),
+    ('permission-denied',None,None,'Bash: gh pr merge 69 --squash — Auto mode could not evaluate this action and is blocking it for safety'),
+    ('stop',None,None,'First line?'),
+])
+def test_request_log_contains_only_brief_action_or_question(bridge, kind, tool, inputs, expected):
+    value = payload(bridge,kind)
+    value.update(session_id='private-session-fixture', transcript_path='/private/transcript-fixture.jsonl', cwd='/private/metadata-cwd')
+    if tool is not None: value.update(tool_name=tool,tool_input=inputs)
+    if kind == 'stop': value['last_assistant_message'] = 'First line?\nSecond line is not a request summary'
+    ap.submit(bridge.project,bridge.settings,'lead-pane',kind,value,100)
+    entry = json.loads((bridge.project/'.tomville/messages.jsonl').read_text())
+    assert entry['text'] == 'Requested ' + kind + ': ' + expected
+    assert entry['from'] == 'boss'
+    assert entry['via'] == ('telegram-approval' if kind.startswith('permission-') else 'telegram-question')
+    for excluded in ('session_id','transcript_path','private-session-fixture','/private/','old_string','new_string','not a log summary','Second line'):
+        assert excluded not in entry['text']
+
+
+def test_long_hook_requests_keep_log_brief_and_one_line(bridge):
+    value = payload(bridge,'permission-denied')
+    value['tool_input']['command'] = 'echo line\n' * 500
+    value['reason'] = 'Reason to deny ' * 100
+    ap.submit(bridge.project,bridge.settings,'lead-pane','permission-denied',value,100)
+    entry = json.loads((bridge.project/'.tomville/messages.jsonl').read_text())
+    assert len(entry['text']) <= 512 and len(entry['text'].splitlines()) == 1
+    assert 'Bash: echo line' in entry['text'] and ' — Reason to deny' in entry['text']
+    assert '…' in entry['text']
