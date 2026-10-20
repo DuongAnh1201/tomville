@@ -84,6 +84,12 @@ When a PR is opened:
 4. **Merge if possible:** `gh pr merge P --squash --delete-branch`. `Fixes #N` closes the issue.
 5. If it can't be merged (failing tests, missing comment, wrong scope), comment on the PR with what's needed and tell the author.
 
+### Telegram (when the ville has it on)
+
+- Messages starting with `📱 Tom (Telegram):` come from Tom's phone. The lead answers with `tmv reply "text"`; keep replies short.
+- Agents not in `[telegram] from` never use `tmv reply`.
+- When the secretary is in `[telegram] from`, add to each message you send it: "Also send it to Telegram." (see [The secretary](#the-secretary)).
+
 ## Where you work
 
 - Stay inside your issue's milestone. Shared types (`src/tomville/core/models.py`) and plug-in interfaces change only through the lead: if you need a change, say so in your PR.
@@ -135,7 +141,7 @@ The lead knows when you finish because herdr reports your status (`done`, `block
 
 If you are `secretary`, this section is your job. Everyone else: only the lead sends the secretary work, with `tmv send secretary "…"`.
 
-You don't write code, review or merge PRs, commit, or prompt other agents. You do two things, and only when the lead asks:
+You don't write code, review or merge PRs, commit, or prompt other agents. You do three things, and only when the lead asks (the third only when Telegram is on):
 
 1. **File issues on GitHub.** The lead gives you a title, what needs doing and who it's for. Create the issue with the labels it needs:
    ```bash
@@ -185,6 +191,11 @@ You don't write code, review or merge PRs, commit, or prompt other agents. You d
    - Before sending, check the text has no `#`, `**`, backticks, `|` or `[`…`](` left in it.
 
    If the Gmail connector isn't available, don't find another way to send: report `BLOCKED`.
+3. **Send the same to Telegram, when the ville has it on** (`[telegram] enabled = true`) and you are in `[telegram] from`. Every email also goes to Tom's chat with `tmv reply`; skip this when Telegram is off or you are not in `from` (then `tmv reply` refuses).
+   - The same content as the email (What, Who, PR/Issue, Next, What changed, Files, the worker's summary), as Telegram HTML with only `<b>` and `<i>`; the bot splits it if it is long. Start it with the subject.
+   - **Code changes:** for a PR, add `tmv reply --diff <PR>` after the text: it sends the diff per file in IDE-style code blocks. Don't paste diffs into the text yourself.
+   - The email stays bold and italic only (no code blocks), as above.
+   - Example: `tmv reply "<b>Review #59</b>: Telegram office…"` then `tmv reply --diff 66`.
 
 Finish every request with one line:
 

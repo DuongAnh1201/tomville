@@ -249,6 +249,20 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 **Check:** the office works in a browser on the tablet.
 
+## M17 · Phone (Telegram)
+
+Optional, one bot per ville, lead + workers only for now. Design: `tomville-telegram-proposal.md` (approved by Tom 2026-10-20).
+
+- [ ] Per-ville bot: setup with pairing code, routing (plain text → lead, `/<agent>` → agent), command menu, pings, `from` list, `tmv reply`, `tmv telegram setup/run/status/pause/resume/off`, `telegram` tab in `tmv up` / `down` (#58)
+- [ ] Approval buttons with the same-question check, off by default, 10-minute expiry (#58)
+- [ ] `tmv reply --diff PR`: diffs per file in code blocks (#72)
+- [x] `tmv new` last question "Connect a Telegram chat to this ville? (no)"; other team shapes get "Sorry, we haven't done Telegram for the <shape> team yet" (#59)
+- [x] Office: 📱 envelope from the door to the target's desk, `📱 → tom:` reply bubble, ✅ / ❌ approval bubble, `📱 tom → codex1: …` in the Events panel (#59)
+- [x] Rules for agents when Telegram is on (`ville.rules_text`, AGENTS.md "For the lead") and the secretary sending its summaries to the chat, diffs with `tmv reply --diff` (#59)
+- [x] README "Phone (Telegram)" and the Commands table rows (#59)
+
+**Check:** pair a real bot; text → the lead; `/codex1 …` → codex1; `/status` answers; another account is ignored; `tmv reply` arrives; the secretary's summary (with `--diff`) arrives; a blocked agent pings; with approvals on, ✅ approves the exact question and a changed question is refused; the office shows the 📱 walking in.
+
 **Part 2 done:** ______
 
 ---
@@ -257,6 +271,7 @@ Goal: every team shape herdr can run, your own pets and looks, and an app anyone
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-20: M17 Phone (Telegram) added at the end of Part 2, at Tom's request: optional, one bot per ville, lead + workers only; approvals off by default; MFA later (#60).
 - 2026-10-18: Release 0.1.0 to PyPI (`uv tool install tomville`): the office, `tmv new` / `up` / `down`, status, doctor, task, setup. Tested on Ubuntu and macOS in CI; live use so far on Ubuntu in Termux PRoot.
 - 2026-10-17: PyPI packaging pulled forward from M15 at Tom's request: MIT licence, package page `docs/pypi.md`, metadata, release workflow. First release 0.1.0 waits for M7 auto setup (#39).
 - 2026-10-17: Auto team setup (`tmv up`, `tmv down`, agent kinds and models, secretary, detection messages) added to M7, since M7's Check already asks for `tmv new` → real team end to end. Lead shape only; pipeline later.

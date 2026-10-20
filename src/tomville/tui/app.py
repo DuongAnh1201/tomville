@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
 from datetime import datetime
@@ -243,7 +244,8 @@ class TomvilleApp(App):
             message = "Board online"
         elif isinstance(event, MessageSent):
             m = event.message
-            message = f"{m.sender or '?'} → {m.to}: {m.text}"
+            text = re.sub(r"<[^>]+>", "", m.text).strip().replace("\n", " ") if m.via.startswith("telegram") else m.text
+            message = f"{'📱 ' if m.via.startswith('telegram') else ''}{m.sender or '?'} → {m.to}: {text}"
         else:
             return
         self.query_one(EventsPanel).write(Text(f"{datetime.now():%H:%M:%S} {message}"))

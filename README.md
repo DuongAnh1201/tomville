@@ -445,6 +445,56 @@ If startup stops at a trust or login question, answer it in the named pane yours
 
 `tmv setup launcher codex` supports npm Codex's native binary and preserves its package environment. It asks before writing `~/.local/bin/codex`, keeps an existing file as `codex.bak`, and refuses to overwrite an existing backup. `--yes` accepts the write. Other launcher kinds report that automatic resolution is unsupported instead of guessing a binary or its environment. Put `~/.local/bin` first on `PATH` and use a fresh pane afterwards. Startup uses `start_timeout` seconds (default 120); herdr requires at least 3001 milliseconds, so smaller configured values use that minimum for the agent-start call.
 
+## Phone (Telegram)
+
+Talk to your ville from your phone. It is **optional**: with Telegram off, nothing about it runs, asks or shows (`tmv doctor` only says "Telegram: not set up (optional)").
+
+**Lead + workers only, for now.** For any other team shape, `tmv new` skips the question and says `Sorry, we haven't done Telegram for the <shape> team yet`.
+
+**One bot per ville.** Each ville gets its own bot, so it is its own chat on your phone, named after the ville. Why not one shared bot: Telegram lets only one program at a time receive a bot's messages, so two villes on one tablet would steal each other's messages. With one bot per ville each runs on its own, the chat is never mixed up with another project's, and stopping one ville never touches another.
+
+### Set it up
+
+1. Last question of `tmv new` ("Connect a Telegram chat to this ville? (no)"), or any time later `tmv telegram setup` in the project.
+2. In Telegram, talk to **@BotFather**: `/newbot`, a name (Tomville suggests `<project> ville`), a username ending in `bot`. It gives you a token.
+3. Paste the token when asked (hidden input). Tomville checks it and shows the bot's username.
+4. Send the 6-digit code Tomville shows to that bot from your phone. Only your private chat with it is paired.
+5. Choose who may message you here (`from`, default `secretary` and `lead`) and whether to allow approvals from the chat.
+
+The ville keeps no secret: `[telegram] enabled`, `bot`, `id`, `approvals`, `from` in `.tomville/ville.toml`. The token and your chat ID live in `~/.config/tomville/telegram/<id>.toml`, mode 600. `tmv up` opens a `telegram` tab with the bot. `tmv telegram off` stops it and deletes the token.
+
+### What you can say
+
+| You type in the ville's chat | Goes to |
+| --- | --- |
+| Plain text, e.g. `start issue #12` | The lead |
+| `/claude2 check the board layout` | That agent (one `/<agent>` per agent; `codex-1` becomes `/codex_1`) |
+| `/status`, `/board`, `/pending` | Team, board and waiting agents |
+| `/pause`, `/resume`, `/help` | Stop and restart forwarding and pings; help |
+
+The Telegram command menu lists them. Every message is logged as from `tom` (via Telegram); only the lead answers, with `tmv reply`.
+
+### What you get
+
+- **Answers** from the lead (`tmv reply "text"`).
+- **Summaries from the secretary**: the same content as its emails (what changed, files, the worker's summary), in bold and italic; when code changed, `tmv reply --diff PR` sends the diff per file in code blocks. Email stays bold and italic only.
+- **Pings** from the bot itself when an agent is blocked, or a card moves to review or done.
+- Only agents in `[telegram] from` can post; `tmv reply` from anyone else says so.
+
+### Approvals (off by default)
+
+With `approvals = true`, a blocked agent's exact question arrives with ✅ Approve and ❌ Decline. Before the key is sent, the bot reads the pane again and checks it is still the same question; if anything changed the tap does nothing and says so. Buttons expire after 10 minutes, and only your paired chat counts. A question it cannot read clearly gets no buttons.
+
+### In the office
+
+- Your message shows as a 📱 coming in at the door and walking to the target's desk, with a bubble of the start of the text. You have no pet.
+- A reply shows as the sender's bubble `📱 → tom: …`; an approval as a ✅ or ❌ bubble over the agent.
+- The Events panel shows `📱 tom → codex1: …`.
+
+### Safety
+
+Only your private chat is answered. The bot has no shell: it forwards text to agents and presses a key for an approval, nothing else. It uses long polling from the tablet, so there is no server, no open port and nothing to host.
+
 ## Install and setup from the terminal
 
 One command installs it, and `tomville doctor` shows the whole setup in the terminal: what is ready, what is missing, and the command to fix it.
@@ -521,7 +571,9 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `send AGENT TEXT` | Prompt another agent and log who sent it (see [Who talks to whom](#who-talks-to-whom)). For agents to use instead of `herdr agent prompt` | `--wait`, `--timeout MS` (passed to herdr) |
 | `status` | Print the team and board once, then exit. Like `claude -p`: no app opens | `--json`, `--watch [SEC]` (reprint every N s), `--agent NAME` |
 | `doctor` | Check the setup and print fixes | `--json` |
-| `new [NAME]` | Create a new ville for this project: name, team shape, agents (kind, model, place), secretary, pets, board, emoji check. Saved in `.tomville/ville.toml`. Bare `tomville` offers this when the project has no ville yet | `--yes` (accept defaults), `--claude-settings FILE` (hook file, default `~/.claude/settings.json`) |
+| `new [NAME]` | Create a new ville for this project: name, team shape, agents (kind, model, place), secretary, pets, board, emoji check, and last "Connect a Telegram chat?" (default no). Saved in `.tomville/ville.toml`. Bare `tomville` offers this when the project has no ville yet | `--yes` (accept defaults), `--claude-settings FILE` (hook file, default `~/.claude/settings.json`) |
+| `telegram setup` / `run` / `status` / `pause` / `resume` / `off` | Optional phone chat for this ville (see [Phone (Telegram)](#phone-telegram)). `off` stops the bot and deletes its token | |
+| `reply TEXT` | Send a reply to Tom's chat. For the lead and the agents in `[telegram] from` | `--diff PR`, `--diff-file FILE` (diff per file in code blocks) |
 | `up` | Build the team in herdr from the ville (see [Start your team](#start-your-team)); with no ville it asks the `new` questions first. Safe to run again | |
 | `down [NAME] [--office \| --agents] [--yes]` | Default/`--office`: close only the office. `NAME`: one owned agent. `--agents`: confirm, then stop all ville agents and the office; pre-existing panes and the caller stay | |
 | `setup launcher KIND` | Write a `~/.local/bin` wrapper that runs the real binary, so herdr can detect it (asks first) | |

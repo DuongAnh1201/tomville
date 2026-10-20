@@ -56,6 +56,7 @@ class Answers:
     style: str = 'emoji'
     agent_specs: dict = field(default_factory=dict)  # lead shape: name -> [agents.NAME] table, in order
     secretary: str = ''  # name of the secretary in agent_specs, if any
+    telegram: bool = False  # run `tmv telegram setup` after the ville is saved
 
     @property
     def agents(self) -> list[str]:
@@ -120,6 +121,10 @@ def ask_answers(project: Path, name: str | None, ask: Ask) -> Answers:
         a.repo = ask('GitHub repository (owner/name, empty = this folder\'s)', a.repo).strip()
     a.check_seconds = _number(ask, 'Check the board every how many seconds', 60)
     a.style = calibrate(ask)
+    if a.shape == 'lead':
+        a.telegram = ask('Connect a Telegram chat to this ville? (yes/no)', 'no').strip().lower().startswith('y')
+    else:
+        print(f"  Sorry, we haven't done Telegram for the {a.shape} team yet")
     return a
 
 
@@ -241,6 +246,11 @@ def rules_text(settings) -> str:
         ]
     else:
         lines += ['- Work items are rows in `TASKS.md`; keep each row\'s status column up to date.']
+    if settings.telegram['enabled']:
+        lines += [
+            '- Messages starting with `📱 Tom (Telegram):` come from Tom\'s phone. The lead answers with `tmv reply "text"`; keep replies short.',
+            '- Agents not in `[telegram] from` never use `tmv reply`.',
+        ]
     return '\n'.join([RULES_START, *lines, RULES_END, ''])
 
 
