@@ -2,7 +2,7 @@
 
 2026-10-16 · Tom Nguyen
 
-**Status (2026-10-17):** Part 1 milestones M0–M6 are done. M7 (interaction, install and auto team setup) is in progress: the `tmv new` agent questions are merged; `tmv up` / `tmv down` are in review. See [milestones.md](milestones.md).
+**Status (2026-10-20):** 0.2.0 is released on PyPI (see [CHANGELOG.md](CHANGELOG.md)). Part 1 milestones M0–M6 are done and M7 is merged. M17 Phone (Telegram) is merged; its live check is pending. See [milestones.md](milestones.md).
 
 ## Summary
 
@@ -654,7 +654,7 @@ The watcher makes only read-only `gh issue list` / `gh pr list` calls. It includ
 ### Doctor
 
 ```
-Tomville doctor · v0.1.0
+Tomville doctor · v0.2.0
 
  Environment
   ✔ Python 3.12.3

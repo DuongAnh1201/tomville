@@ -271,6 +271,7 @@ Optional, one bot per ville, lead + workers only for now. Design: `tomville-tele
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-20: Release 0.2.0 to PyPI, highlighting Telegram (M17): optional phone chat per ville, lead permission buttons, diffs, wall board cards, `tmv watch`, fixes (see CHANGELOG.md). M17 live check still pending.
 - 2026-10-20: M17 Phone (Telegram) added at the end of Part 2, at Tom's request: optional, one bot per ville, lead + workers only; approvals off by default; MFA later (#60).
 - 2026-10-18: Release 0.1.0 to PyPI (`uv tool install tomville`): the office, `tmv new` / `up` / `down`, status, doctor, task, setup. Tested on Ubuntu and macOS in CI; live use so far on Ubuntu in Termux PRoot.
 - 2026-10-17: PyPI packaging pulled forward from M15 at Tom's request: MIT licence, package page `docs/pypi.md`, metadata, release workflow. First release 0.1.0 waits for M7 auto setup (#39).

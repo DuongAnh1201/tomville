@@ -1,6 +1,6 @@
 [project]
 name = "tomville"
-version = "0.1.0"
+version = "0.2.0"
 description = "A retro game view of your agent team, built on top of herdr"
 readme = "docs/pypi.md"
 license = "MIT"
