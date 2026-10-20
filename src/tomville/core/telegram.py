@@ -9,7 +9,6 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from html import escape
-from html.parser import HTMLParser
 import fcntl
 import getpass
 import http.client
@@ -31,6 +30,7 @@ from tomville.core import messages, team
 from tomville.core.models import Message
 from tomville.core.settings import load_settings, read_toml
 from tomville.core.ville import has_ville, update_ville
+from tomville.core.telegram_text import chunks, diff_messages, parse_diff, pr_diff
 
 COMMANDS = {'status': 'Team status', 'board': 'Task board', 'pending': 'Waiting agents',
             'pause': 'Pause forwarding and pings', 'resume': 'Resume', 'help': 'Help', 'start': 'Help'}
@@ -180,61 +180,6 @@ class Bot:
             options = params if index == len(parts) - 1 else {k: v for k, v in params.items() if k != 'reply_markup'}
             result = self.call('sendMessage', chat_id=chat_id, text=part, parse_mode='HTML', **options)
         return result
-
-
-class _Chunks(HTMLParser):
-    """Balance supported HTML tags and entities at each message boundary."""
-    def __init__(self, size):
-        super().__init__(convert_charrefs=False)
-        self.size, self.parts, self.current, self.tags = size, [], '', []
-
-    def closing(self):
-        return ''.join(f'</{t}>' for t in reversed(self.tags))
-
-    def flush(self):
-        self.parts.append(self.current + self.closing())
-        self.current = ''.join(f'<{t}>' for t in self.tags)
-
-    def add(self, text):
-        if len(self.current) + len(text) + len(self.closing()) > self.size:
-            self.flush()
-        self.current += text
-
-    def handle_starttag(self, tag, attrs):
-        if tag not in ('b', 'i') or attrs:
-            raise ValueError('Telegram text supports only <b> and <i>')
-        if len(self.current) + len(tag) * 2 + 5 + len(self.closing()) > self.size:
-            self.flush()
-        self.current += f'<{tag}>'
-        self.tags.append(tag)
-
-    def handle_endtag(self, tag):
-        if not self.tags or self.tags[-1] != tag:
-            raise ValueError('Unbalanced Telegram HTML')
-        self.current += f'</{self.tags.pop()}>'
-
-    def handle_data(self, data):
-        for char in data:
-            self.add(escape(char, quote=False))
-
-    def handle_entityref(self, name):
-        if name not in ('amp', 'lt', 'gt', 'quot'):
-            raise ValueError('Unsupported HTML entity')
-        self.add(f'&{name};')
-
-    def handle_charref(self, name):
-        self.add(f'&#{name};')
-
-
-def chunks(text, size=4096):
-    parser = _Chunks(size)
-    parser.feed(text)
-    parser.close()
-    if parser.tags:
-        raise ValueError('Unbalanced Telegram HTML')
-    if parser.current:
-        parser.parts.append(parser.current)
-    return parser.parts
 
 
 def trusted(message, chat_id=None):
@@ -567,18 +512,39 @@ async def _run(bridge):
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-def reply(project, settings, text, *, bot_factory=Bot):
+def reply(project, settings, text=None, *, diff=None, diff_file=None, bot_factory=Bot):
     if not settings.telegram['enabled']:
         raise ValueError('Telegram disabled; run tmv telegram setup')
     sender = messages.sender_name()
     allowed = settings.telegram['from']
     if not sender or not (sender in allowed or sender == settings.lead and 'lead' in allowed):
         raise ValueError('This agent is not allowed to reply; change telegram.from in the ville')
-    config = load_config(settings)
+    if sum(value is not None for value in (text, diff, diff_file)) != 1:
+        raise ValueError('reply requires text, --diff PR or --diff-file FILE')
     pet = settings.pets.get(sender, {}).get('sprite', '')
     icon = {'cat': '🐱', 'dog': '🐶', 'sheep': '🐑'}.get(pet, '🐾')
-    bot_factory(config['token']).send(config['chat_id'], escape(f'{icon} {sender}: ') + text)
-    messages.append(project, Message(datetime.now(timezone.utc), sender, 'tom', text, 'telegram'))
+    prefix = f'{icon} <code>{escape(sender)}</code>: '
+    if text is not None:
+        parts = chunks(prefix + text)
+        log_text = text
+    else:
+        if diff is not None:
+            headline, raw = pr_diff(project, diff, settings.repo)
+        else:
+            path = Path(diff_file).expanduser()
+            if not path.is_absolute():
+                path = project / path
+            raw = path.read_text(encoding='utf-8')
+            files = parse_diff(raw)
+            headline = (f'Saved diff: <code>{escape(path.name)}</code> '
+                        f'(+{sum(f.added for f in files)} −{sum(f.removed for f in files)})')
+        parts = diff_messages(raw, headline, prefix=prefix)
+        log_text = headline + '\n' + raw
+    config = load_config(settings)
+    bot = bot_factory(config['token'])
+    for part in parts:
+        bot.send(config['chat_id'], part)
+    messages.append(project, Message(datetime.now(timezone.utc), sender, 'tom', log_text, 'telegram'))
 
 
 def stop_tab(project):
