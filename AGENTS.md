@@ -142,30 +142,51 @@ You don't write code, review or merge PRs, commit, or prompt other agents. You d
    gh issue create --title "<title>" --body-file <file> --label status:todo --label agent:<who>
    ```
    The body says what to do, links the milestone in `milestones.md` and lists anything it waits on (`Waits on #N`). If the lead didn't say who it's for, leave out the `agent:` label and say so.
-2. **Email Tom when work is finished.** When the lead tells you an issue was merged or a milestone is done, send one email to **tomnguyen6766@gmail.com** with the Gmail connector. Never send to any other address.
-   - Subject: `[Tomville] Done #N: <issue title>` or `[Tomville] Milestone M<n> done`
+2. **Email Tom at each step of the work, always with what changed.** Tom wants to see the changes themselves, not only a notice. The lead tells you when something happened; send one email to **tomnguyen6766@gmail.com** with the Gmail connector. Never send to any other address.
+
+   | Event (from the lead) | Subject |
+   | --- | --- |
+   | A worker opened a PR (ready for review) | `[Tomville] Review #N: <issue title>` |
+   | The lead merged a PR | `[Tomville] Merged #N: <issue title>` |
+   | A worker is blocked | `[Tomville] Blocked #N: <issue title>` |
+   | A milestone is done | `[Tomville] Milestone M<n> done` |
+
    - Body, plain text:
      ```
-     What: <one or two lines>
-     Who: <the agent that did the work>
+     What: <one or two lines: what happened>
+     Who: <the agent that did the work, as the lead said>
      PR: <URL>   Issue: <URL>
-     Next: <the next open issue or milestone, if the lead said>
+     Next: <the next step, if the lead said>
+
+     What changed:
+     <every change, in plain words, from the PR description and the issue comment>
+
+     Files:
+     <each file from the PR with its +added / -removed lines>
+     <file>: <what changed in it and why>
 
      Summary from <agent>:
      <the worker's "Solved in #P" comment on the issue, copied in full:
       What changed, Files, How I tested, Decisions, Not done / follow-ups>
      ```
-   - For a milestone, send one email that lists every issue in it, each with its summary comment.
-   - Get the facts from `gh pr view P` and `gh issue view N --comments`; copy the summary comment as written, don't shorten or guess. If there is no summary comment yet, say so in the email and tell the lead.
+   - **What changed** and **Files** are required in every email about a PR, opened or merged. Get them from `gh pr view P --json title,body,files,url` and `gh pr diff P`; describe what the diff does, don't paste it.
+   - **Blocked:** what is wrong and what the worker needs, from its `BLOCKED` line as the lead passes it on, plus what the PR or branch has changed so far if there is one.
+   - **Milestone:** one email that lists every issue in it, each with its What changed, Files and summary comment.
+   - Get the facts from `gh pr view`, `gh pr diff` and `gh issue view N --comments`. Copy the summary comment as written; don't shorten or guess. If there is no summary comment yet, say so in the email and tell the lead.
 
    If the Gmail connector isn't available, don't find another way to send: report `BLOCKED`.
 
 Finish every request with one line:
 
-- `DONE: issue #N created` or `DONE: emailed Tom about #N`
+- `DONE: issue #N created` or `DONE: emailed Tom about #N (<event>)`
 - `BLOCKED: <what is wrong and what you need>`
 
-The lead, after every merge and finished milestone: `tmv send secretary "Merged #N (PR #P). Email Tom."`
+The lead tells the secretary at every step, naming who did the work:
+
+- PR opened: `tmv send secretary "Review: #N, PR #P by <agent>. Email Tom."`
+- PR merged: `tmv send secretary "Merged: #N, PR #P by <agent>. Email Tom."`
+- Worker blocked: `tmv send secretary "Blocked: #N by <agent>: <its BLOCKED line>. Email Tom."`
+- Milestone done: `tmv send secretary "Milestone M<n> done: #A, #B, …. Email Tom."`
 
 ## Reporting back
 
