@@ -48,6 +48,9 @@ def build_parser():
     common_options(status)
     status.add_argument('--watch', nargs='?', const=1, type=float, metavar='SEC')
     status.add_argument('--agent', metavar='NAME')
+    watch = commands.add_parser('watch', help='wait for a GitHub issue or PR change, then exit')
+    common_options(watch)
+    watch.add_argument('--limit', type=int, default=1000, help='maximum issue/PR history per list; fail visibly if reached')
     doctor = commands.add_parser('doctor', help='check setup and print fixes')
     common_options(doctor)
     config = commands.add_parser('config', help='read and write user settings')
@@ -139,6 +142,13 @@ def output(value, args, text=None):
 
 def config_command(args):
     path = config_path(args.config)
+    watch_root = None
+    if getattr(args, 'key', None) == 'board.watch' and args.config is None:
+        from tomville.core.messages import repo_root
+        from tomville.core.ville import has_ville, ville_path
+        root = repo_root(args.project.expanduser().resolve())
+        if has_ville(root):
+            path, watch_root = ville_path(root), root
     if args.config_command == 'path':
         output(str(path), args)
     elif args.config_command == 'show':
@@ -146,6 +156,9 @@ def config_command(args):
         output(data, args, path.read_text() if path.exists() else '')
     elif args.config_command == 'set':
         value = write_config_value(path, args.key, args.value)
+        if watch_root is not None:
+            from tomville.core.ville import install_rules
+            install_rules(watch_root, load_settings(watch_root))
         output({'key': args.key, 'value': value}, args, f'{args.key} = {value}')
     else:
         data = read_toml(path)
@@ -327,6 +340,14 @@ def main(argv=None):
         settings = load_settings(project, config=args.config, **{key: getattr(args, keys.get(key, key), None) for key in ('source', 'check_seconds', 'poll_seconds', 'pets', 'fps', 'style', 'theme', 'layout', 'team', 'lead', 'demo', 'still')})
         if args.verbose:
             print(f'Project: {project} · Settings: {config_path(args.config)}', file=sys.stderr)
+        if args.command == 'watch':
+            from tomville.core import watch
+            from tomville.core.messages import repo_root
+            root = repo_root(project)
+            settings = load_settings(root, config=args.config, **{key: getattr(args, keys.get(key, key), None) for key in ('source', 'check_seconds', 'poll_seconds', 'pets', 'fps', 'style', 'theme', 'layout', 'team', 'lead', 'demo', 'still')})
+            changes = watch.run(root, settings, limit=args.limit)
+            output(changes, args, '\n'.join(watch.format_change(change) for change in changes))
+            return 0
         if args.command in ('telegram', 'reply'):
             from tomville.core import telegram
             if args.command == 'reply':

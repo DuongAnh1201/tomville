@@ -88,6 +88,7 @@ def telegram_settings(table):
 @dataclass
 class OfficeSettings(ReaderSettings):
     name: str = ''
+    watch: bool = False
     fps: int = 10
     style: str = 'emoji'
     theme: str = 'night'
@@ -104,6 +105,8 @@ class OfficeSettings(ReaderSettings):
 
     def __post_init__(self):
         super().__post_init__()
+        if not isinstance(self.watch, bool):
+            raise ValueError('board.watch must be a boolean')
         self.pets = self.pets or {}
         self.agents = self.agents or {}
         self.telegram = telegram_settings(self.telegram or {})
@@ -155,7 +158,7 @@ def settings_from_data(data):
     if not isinstance(data.get('name', ''), str):
         raise ValueError('name must be text')
     return OfficeSettings(
-        name=data.get('name', ''), source=board.get('source', 'github'), repo=board.get('repo', ''),
+        name=data.get('name', ''), watch=board.get('watch', False), source=board.get('source', 'github'), repo=board.get('repo', ''),
         check_seconds=float(board.get('check_seconds', 60)), poll_seconds=float(data.get('poll_seconds', 1)),
         fps=data.get('fps', 10), style=data.get('style', 'emoji'), theme=data.get('theme', 'night'),
         layout=data.get('layout', 'auto'), team=team.get('shape', 'lead'), lead=team.get('lead'),
@@ -209,7 +212,7 @@ def set_key(data, key, value):
 def write_config_value(path, key, text):
     import tomli_w
 
-    known = {'fps', 'style', 'theme', 'layout', 'poll_seconds', 'demo', 'still', 'start_timeout', 'board.source', 'board.repo', 'board.check_seconds', 'team.shape', 'team.lead', 'team.stages'}
+    known = {'fps', 'style', 'theme', 'layout', 'poll_seconds', 'demo', 'still', 'start_timeout', 'board.source', 'board.repo', 'board.check_seconds', 'board.watch', 'team.shape', 'team.lead', 'team.stages'}
     pet_key = key.startswith('pets.') and len(key.split('.')) == 3 and key.split('.')[-1] in ('sprite', 'color')
     if key not in known and not pet_key:
         raise ValueError(f'unknown setting: {key}')

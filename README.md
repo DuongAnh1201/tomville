@@ -568,6 +568,8 @@ tmv --style blocks --pet codex1=fox --fps 15  # one-off look
 tmv status                                    # quick text summary
 tmv status --watch 5                          # live summary in a small pane
 tmv status --json                             # for scripts and agents
+tmv watch                                     # wait for a GitHub issue/PR change, then exit
+tmv watch --json                              # the same changes as a JSON array
 tmv doctor
 tmv pets new fox --from cat && tmv pets check fox
 tmv config set theme night
@@ -590,6 +592,12 @@ Because `status --json` prints the team and board as JSON, Claude can read it wi
 ```markdown
 - To see the whole team at once, run `tomville status --json`.
 ```
+
+### Lead GitHub watcher
+
+GitHub watching is opt-in, with `[board] watch = false` by default. `tmv new` asks whether to enable it (default no); `tmv config set board.watch true` enables it later for the current ville and refreshes its generated rules. When enabled, the lead keeps `tmv watch` running in the background. Manual `tmv watch` works even when the setting is off. Telegram blocked/review/done pings are unchanged. It reads issues and PRs every `[board] check_seconds` (the same interval chosen by `tmv new`), exits with changes, and should be restarted after the lead handles them. The first successful read creates a silent baseline in the ignored `.tomville/watch.json`. Later runs compare with it, including new/edited/closed items, reviews and CI red/green. GitHub failures print to stderr and retry at the next interval; `--json` keeps stdout machine-readable.
+
+The watcher makes only read-only `gh issue list` / `gh pr list` calls. It includes closed/merged records so a closure is explicit, never guessed from a missing row. If its default history limit of 1,000 items per kind is reached, it reports this instead of saving a partial baseline; restart with a larger `--limit`. Forks and authors other than the repository owner are marked outside/unverified because the list API does not expose collaborator membership. The lead reviews and reports those PRs to Tom, and never merges them without his approval. Team PRs still require conflict checks, tests and review before merging; new issues need labels/assignment or a question to Tom. `tmv doctor` shows the watcher interval.
 
 ### Doctor
 

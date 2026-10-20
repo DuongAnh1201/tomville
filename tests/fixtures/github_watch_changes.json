@@ -1,0 +1,258 @@
+{
+  "subject_pr": 73,
+  "baseline_pr": {
+    "author": {
+      "id": "U_kgDOC1WdsQ",
+      "is_bot": false,
+      "login": "DuongAnh1201",
+      "name": ""
+    },
+    "headRepositoryOwner": {
+      "id": "U_kgDOC1WdsQ",
+      "login": "DuongAnh1201"
+    },
+    "isCrossRepository": false,
+    "labels": [],
+    "number": 73,
+    "reviewDecision": "",
+    "reviewRequests": [],
+    "reviews": [],
+    "state": "OPEN",
+    "statusCheckRollup": [],
+    "title": "Telegram code blocks and file-aware PR diff replies",
+    "updatedAt": "2026-10-20T20:40:03Z",
+    "url": "https://github.com/DuongAnh1201/tomville/pull/73"
+  },
+  "cases": {
+    "review_requested": {
+      "kind": "pr",
+      "item": {
+        "author": {
+          "id": "U_kgDOC1WdsQ",
+          "is_bot": false,
+          "login": "DuongAnh1201",
+          "name": ""
+        },
+        "headRepositoryOwner": {
+          "id": "U_kgDOC1WdsQ",
+          "login": "DuongAnh1201"
+        },
+        "isCrossRepository": false,
+        "labels": [],
+        "number": 73,
+        "reviewDecision": "",
+        "reviewRequests": [
+          {
+            "__typename": "User",
+            "login": "jay23606"
+          }
+        ],
+        "reviews": [],
+        "state": "OPEN",
+        "statusCheckRollup": [],
+        "title": "Telegram code blocks and file-aware PR diff replies",
+        "updatedAt": "2026-10-20T20:40:03Z",
+        "url": "https://github.com/DuongAnh1201/tomville/pull/73"
+      }
+    },
+    "review_submitted": {
+      "kind": "pr",
+      "item": {
+        "author": {
+          "id": "U_kgDOC1WdsQ",
+          "is_bot": false,
+          "login": "DuongAnh1201",
+          "name": ""
+        },
+        "headRepositoryOwner": {
+          "id": "U_kgDOC1WdsQ",
+          "login": "DuongAnh1201"
+        },
+        "isCrossRepository": false,
+        "labels": [],
+        "number": 73,
+        "reviewDecision": "APPROVED",
+        "reviewRequests": [],
+        "reviews": [
+          {
+            "id": "fixture-review-1",
+            "author": {
+              "login": "jay23606"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-10-20T21:00:00Z"
+          }
+        ],
+        "state": "OPEN",
+        "statusCheckRollup": [],
+        "title": "Telegram code blocks and file-aware PR diff replies",
+        "updatedAt": "2026-10-20T20:40:03Z",
+        "url": "https://github.com/DuongAnh1201/tomville/pull/73"
+      }
+    },
+    "changes_requested": {
+      "kind": "pr",
+      "item": {
+        "author": {
+          "id": "U_kgDOC1WdsQ",
+          "is_bot": false,
+          "login": "DuongAnh1201",
+          "name": ""
+        },
+        "headRepositoryOwner": {
+          "id": "U_kgDOC1WdsQ",
+          "login": "DuongAnh1201"
+        },
+        "isCrossRepository": false,
+        "labels": [],
+        "number": 73,
+        "reviewDecision": "CHANGES_REQUESTED",
+        "reviewRequests": [],
+        "reviews": [
+          {
+            "id": "fixture-review-1",
+            "author": {
+              "login": "jay23606"
+            },
+            "state": "CHANGES_REQUESTED",
+            "submittedAt": "2026-10-20T21:00:00Z"
+          }
+        ],
+        "state": "OPEN",
+        "statusCheckRollup": [],
+        "title": "Telegram code blocks and file-aware PR diff replies",
+        "updatedAt": "2026-10-20T20:40:03Z",
+        "url": "https://github.com/DuongAnh1201/tomville/pull/73"
+      }
+    },
+    "ci_red": {
+      "kind": "pr",
+      "item": {
+        "author": {
+          "id": "U_kgDOC1WdsQ",
+          "is_bot": false,
+          "login": "DuongAnh1201",
+          "name": ""
+        },
+        "headRepositoryOwner": {
+          "id": "U_kgDOC1WdsQ",
+          "login": "DuongAnh1201"
+        },
+        "isCrossRepository": false,
+        "labels": [],
+        "number": 73,
+        "reviewDecision": "",
+        "reviewRequests": [],
+        "reviews": [],
+        "state": "OPEN",
+        "statusCheckRollup": [
+          {
+            "__typename": "CheckRun",
+            "status": "COMPLETED",
+            "conclusion": "FAILURE",
+            "name": "tests"
+          }
+        ],
+        "title": "Telegram code blocks and file-aware PR diff replies",
+        "updatedAt": "2026-10-20T20:40:03Z",
+        "url": "https://github.com/DuongAnh1201/tomville/pull/73"
+      }
+    },
+    "ci_green": {
+      "kind": "pr",
+      "item": {
+        "author": {
+          "id": "U_kgDOC1WdsQ",
+          "is_bot": false,
+          "login": "DuongAnh1201",
+          "name": ""
+        },
+        "headRepositoryOwner": {
+          "id": "U_kgDOC1WdsQ",
+          "login": "DuongAnh1201"
+        },
+        "isCrossRepository": false,
+        "labels": [],
+        "number": 73,
+        "reviewDecision": "",
+        "reviewRequests": [],
+        "reviews": [],
+        "state": "OPEN",
+        "statusCheckRollup": [
+          {
+            "__typename": "CheckRun",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+            "name": "tests"
+          }
+        ],
+        "title": "Telegram code blocks and file-aware PR diff replies",
+        "updatedAt": "2026-10-20T20:40:03Z",
+        "url": "https://github.com/DuongAnh1201/tomville/pull/73"
+      }
+    },
+    "pr_closed": {
+      "kind": "pr",
+      "item": {
+        "author": {
+          "id": "U_kgDOC1WdsQ",
+          "is_bot": false,
+          "login": "DuongAnh1201",
+          "name": ""
+        },
+        "headRepositoryOwner": {
+          "id": "U_kgDOC1WdsQ",
+          "login": "DuongAnh1201"
+        },
+        "isCrossRepository": false,
+        "labels": [],
+        "number": 73,
+        "reviewDecision": "",
+        "reviewRequests": [],
+        "reviews": [],
+        "state": "CLOSED",
+        "statusCheckRollup": [],
+        "title": "Telegram code blocks and file-aware PR diff replies",
+        "updatedAt": "2026-10-20T20:40:03Z",
+        "url": "https://github.com/DuongAnh1201/tomville/pull/73"
+      }
+    },
+    "issue_closed": {
+      "kind": "issue",
+      "item": {
+        "assignees": [],
+        "author": {
+          "id": "U_kgDOC1WdsQ",
+          "is_bot": false,
+          "login": "DuongAnh1201",
+          "name": ""
+        },
+        "labels": [
+          {
+            "id": "LA_kwDOVM3uns8AAAAC9mESng",
+            "name": "bug",
+            "description": "Something isn't working",
+            "color": "d73a4a"
+          },
+          {
+            "id": "LA_kwDOVM3uns8AAAAC9ofIbw",
+            "name": "status:doing",
+            "description": "Board: in progress",
+            "color": "fbca04"
+          },
+          {
+            "id": "LA_kwDOVM3uns8AAAAC9ofJ4A",
+            "name": "agent:codex1",
+            "description": "Worker: data side",
+            "color": "a6da95"
+          }
+        ],
+        "number": 74,
+        "state": "CLOSED",
+        "title": "The lead doesn't check GitHub at the ville's board interval (check_seconds)",
+        "updatedAt": "2026-10-20T20:40:57Z",
+        "url": "https://github.com/DuongAnh1201/tomville/issues/74"
+      }
+    }
+  }
+}

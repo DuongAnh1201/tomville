@@ -53,6 +53,7 @@ class Answers:
     source: str = 'github'
     repo: str = ''
     check_seconds: float = 60
+    watch: bool = False
     style: str = 'emoji'
     agent_specs: dict = field(default_factory=dict)  # lead shape: name -> [agents.NAME] table, in order
     secretary: str = ''  # name of the secretary in agent_specs, if any
@@ -67,7 +68,7 @@ class Answers:
             team['lead'] = self.lead
         else:
             team['stages'] = self.workers
-        board: dict = {'source': self.source, 'check_seconds': self.check_seconds}
+        board: dict = {'source': self.source, 'check_seconds': self.check_seconds, 'watch': self.watch}
         if self.repo and self.source == 'github':
             board['repo'] = self.repo
         data = {
@@ -119,6 +120,8 @@ def ask_answers(project: Path, name: str | None, ask: Ask) -> Answers:
     if a.source == 'github':
         a.repo = ask('GitHub repository (owner/name, empty = this folder\'s)', a.repo).strip()
     a.check_seconds = _number(ask, 'Check the board every how many seconds', 60)
+    if a.source == 'github':
+        a.watch = _choice(ask, f'Should the lead check GitHub every {a.check_seconds:g} s for new issues, PRs, reviews and CI?', 'no', ('yes', 'no')) == 'yes'
     a.style = calibrate(ask)
     return a
 
@@ -235,6 +238,11 @@ def rules_text(settings) -> str:
         '',
         '- To prompt another agent, run `tmv send AGENT "text"`, not `herdr agent prompt`: it logs who sent the message.',
     ]
+    if settings.source == 'github' and settings.watch:
+        lines += [
+            '- Lead only: keep `tmv watch` running in the background at all times. It polls every `[board] check_seconds` and exits on changes; handle them and restart it.',
+            '- Lead only: team PR → check conflicts, review/test and merge when ready; outside/fork/unverified PR → review and report to Tom via Telegram/email, never merge without Tom’s approval; new issue → label and assign, or ask Tom.',
+        ]
     if settings.source == 'github':
         lines += [
             '- Work items are GitHub issues. Use `tmv task new "title"`, `tmv task take N`, `tmv task move N review` and `tmv task list` instead of long `gh` commands.',

@@ -74,6 +74,13 @@ Post it with `gh issue comment N --body-file <file>`:
 
 ## For the lead
 
+GitHub watching is opt-in: `[board] watch = false` by default. Only when `[board] watch = true`, keep `tmv watch` running in the background at all times. It checks GitHub every `[board] check_seconds`, exits with one line per change, and remembers its baseline in the ignored `.tomville/watch.json`. After handling a change, restart it immediately when enabled. With watching off, there is no requirement to run it; manual `tmv watch` still works. Telegram pings are independent of this setting.
+
+- Team PR: check conflicts, review/test and merge when ready using the steps below.
+- Outside/fork/unverified PR: review and report to Tom via Telegram/email; never merge without Tom's explicit approval.
+- New issue: label and assign it, or ask Tom.
+- Review requests, submitted reviews, changes requested and CI red/green: inspect the affected PR and apply the same team/outside policy.
+
 When a PR is opened:
 
 1. **Check for conflicts:** `gh pr view P --json mergeable,mergeStateStatus`.
@@ -81,7 +88,7 @@ When a PR is opened:
    - `MERGEABLE`: go on.
 2. **Review:** read the diff (`gh pr diff P`), run `uv run pytest` and the milestone Check on the PR branch.
 3. **Check the issue comment** exists and is complete.
-4. **Merge if possible:** `gh pr merge P --squash --delete-branch`. `Fixes #N` closes the issue.
+4. **Merge a team PR if possible (outside/fork/unverified PRs require Tom's explicit approval):** `gh pr merge P --squash --delete-branch`. `Fixes #N` closes the issue.
 5. If it can't be merged (failing tests, missing comment, wrong scope), comment on the PR with what's needed and tell the author.
 
 ## Where you work
