@@ -73,6 +73,7 @@ def test_storage_and_validation(ville):
 def test_pairing(ville, monkeypatch):
     project, settings, _ = ville
     settings.telegram['enabled'] = False
+    tg.team.save_state(project,{'agents':{},'lead_pane':'paired-lead'})
     bot = Mock(token='123:fake')
     bot.call.side_effect = [API['getMe']['result'], True,
         [*API['getUpdates']['result'][1:4], {'update_id': 20, 'message': dict(API['getUpdates']['result'][0]['message'], text='000007')}]]
@@ -83,6 +84,7 @@ def test_pairing(ville, monkeypatch):
     assert tg.load_config(paired)['chat_id'] == 42
     assert tg.load_config(paired)['offset'] == 21
     assert not paired.telegram['approvals']
+    assert tg.leads.lookup('paired-lead') == project
     assert 'token' not in (project / '.tomville/ville.toml').read_text()
     bot.send.assert_called_once_with(42, 'Paired ✅')
 
@@ -169,9 +171,12 @@ def test_reply_and_off(ville, monkeypatch):
     tg.reply(project, settings, '<b>hello</b>', bot_factory=lambda t:bot)
     assert bot.send.call_args.args[0] == 42
     monkeypatch.setattr(tg.team, 'load_state', lambda p: {'agents': {}})
+    tg.leads.register(project,'lead-pane')
     assert not tg.off(project, settings, lambda q:False)
     assert tg.config_path('fixture123').exists()
+    assert tg.leads.lookup('lead-pane') == project
     assert tg.off(project, settings, lambda q:True)
+    assert tg.leads.lookup('lead-pane') is None
     assert not tg.config_path('fixture123').exists()
     assert not load_settings(project).telegram['enabled']
 

@@ -13,6 +13,7 @@ import sys
 import time
 
 from tomville.core.commands import run_command
+from tomville.core import leads
 from tomville.core.settings import DEFAULT_START_TIMEOUT
 
 STATE = Path('.tomville/team.json')
@@ -198,6 +199,7 @@ def up(project, settings):
         state['lead_spec'] = lead_spec
         state['lead_pane'] = lead_pane
         save_state(project, state)
+        leads.register(project, lead_pane)
     if lead != settings.lead:
         from tomville.core.ville import update_ville, ville_path
         from tomville.core.settings import read_toml
@@ -222,6 +224,7 @@ def up(project, settings):
                     lead_pane = live['pane_id']
                     state.update(lead_pane=lead_pane, lead_terminal=live.get('terminal_id'), lead_kind=live.get('agent'))
                     save_state(project, state)
+                    leads.register(project, lead_pane)
                 if live.get('agent_status') == 'blocked':
                     owned = state['agents'].get(name)
                     if owned and owned['pane'] == live['pane_id'] and not owned.get('prompt_sent'):
@@ -261,6 +264,7 @@ def up(project, settings):
                 lead_pane = pane
                 state.update(lead_pane=pane, lead_terminal=detected.get('terminal_id'), lead_kind=detected.get('agent'))
                 save_state(project, state)
+                leads.register(project, pane)
             run_command(['tmv', '-C', str(project), 'send', name, first_prompt(spec, lead, settings.agents, project)], project)
             owned['prompt_sent'] = True
             save_state(project, state)
@@ -387,4 +391,6 @@ def down(project, name=None, *, settings=None, agents=False, confirm=None):
             rows.append(dict(row, result=result))
         except ERRORS as exc:
             rows.append(dict(row, result=f'FAILED: {exc}'))
+    if agents:
+        leads.unregister(project)
     return rows

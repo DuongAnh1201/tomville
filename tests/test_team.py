@@ -17,6 +17,7 @@ def recorded(name):
 
 @pytest.fixture
 def runtime(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path/'home')
     monkeypatch.setenv('HERDR_ENV', '1')
     monkeypatch.delenv('HERDR_PANE_ID', raising=False)
     monkeypatch.setenv('TOMVILLE_CONFIG', str(tmp_path / 'user.toml'))
@@ -558,3 +559,25 @@ def test_up_reports_adopted_lead_rename_failure(runtime, monkeypatch):
     with pytest.raises(OSError, match='name already in use'):
         team.up(project, settings(boss=AgentSpec('boss', 'claude', place='here')))
     assert not (project / team.STATE).exists()
+
+
+def test_lead_registration_on_start_adopt_repeat_and_shutdown(runtime,monkeypatch):
+    from tomville.core import leads
+    project,calls,agents,panes,tabs = runtime
+    conf = settings(boss=AgentSpec('boss','claude',place='here'),worker=AgentSpec('worker','codex'))
+    team.up(project,conf)
+    pane = team.load_state(project)['lead_pane']
+    assert leads.read() == {pane:str(project)}
+    # Re-adopting a live lead repairs a missing entry.
+    leads.unregister(project)
+    team.up(project,conf)
+    assert leads.lookup(pane) == project
+    # Adopting a different caller replaces this ville's old pane only.
+    agents.append({'name':'boss','agent':'claude','pane_id':'caller','terminal_id':'caller-term'})
+    monkeypatch.setenv('HERDR_PANE_ID','caller')
+    team.up(project,conf)
+    assert leads.read() == {'caller':str(project)}
+    team.down(project,settings=conf,agents=True,confirm=lambda rows:False)
+    assert leads.lookup('caller') == project
+    team.down(project,settings=conf,agents=True,confirm=lambda rows:True)
+    assert leads.read() == {}
