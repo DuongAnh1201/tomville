@@ -17,6 +17,7 @@ CONTRACTS = json.loads((FIXTURES / 'claude_hook_contracts.json').read_text())
 
 @pytest.fixture
 def bridge(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path/'home')
     monkeypatch.setenv('TOMVILLE_CONFIG', str(tmp_path/'global.toml'))
     monkeypatch.setenv('HERDR_ENV', '1')
     monkeypatch.setenv('HERDR_PANE_ID', 'lead-pane')
@@ -634,3 +635,95 @@ def test_read_only_queue_scans_do_not_rewrite_request_history(bridge, monkeypatc
     ta.scan(bridge)
     assert read(bridge,data)['issued']
     write.assert_not_called()
+
+
+@pytest.mark.parametrize('kind', list(ap.EVENTS))
+@pytest.mark.parametrize('location', ['ville','subfolder','nested_repo','registered_outside'])
+def test_hooks_find_owned_ville_from_pane_across_directories(bridge, monkeypatch, kind, location):
+    project = bridge.project
+    if location == 'ville': cwd = project
+    elif location == 'subfolder': cwd = project/'docs'/'notes'
+    elif location == 'nested_repo': cwd = project/'other-repo'/'src'
+    else:
+        cwd = project.parent/(project.name+'-outside')/'src'
+        ap.leads.register(project,'lead-pane')
+    cwd.mkdir(parents=True,exist_ok=True)
+    monkeypatch.setattr(ap.messages,'repo_root',lambda p:pytest.fail('ville lookup must not depend on Git cwd'))
+    value = payload(bridge,kind); value['cwd'] = str(cwd)
+    output = io.StringIO()
+    def answer(_):
+        files = list((project/ap.DIRECTORY).glob('*.json'))
+        assert len(files) == 1
+        with ap.locked(project,files[0].stem) as request:
+            request.update(status='answered',answer={'behavior':'deny','reason':'fixture answer'})
+    ap.hook(kind,io.StringIO(json.dumps(value)),out=output,clock=lambda:100,sleep=answer)
+    files = list((project/ap.DIRECTORY).glob('*.json'))
+    assert len(files) == 1
+    request = json.loads(files[0].read_text())
+    assert request['pane'] == 'lead-pane' and request['payload']['cwd'] == str(cwd)
+    if cwd != project: assert not (cwd/ap.DIRECTORY).exists()
+    if kind in ('permission-request','ask-user-question'):
+        assert json.loads(output.getvalue())['hookSpecificOutput']['hookEventName'] == ap.EVENTS[kind]
+    else: assert output.getvalue() == ''
+
+
+@pytest.mark.parametrize('kind', list(ap.EVENTS))
+@pytest.mark.parametrize('case', ['outside','different_pane','telegram_off','pipeline'])
+def test_ville_lookup_never_answers_for_an_unowned_or_ineligible_ville(bridge, monkeypatch, kind, case):
+    cwd = bridge.project
+    if case == 'outside':
+        cwd = cwd.parent/(cwd.name+'-outside'); cwd.mkdir()
+    elif case == 'different_pane': monkeypatch.setenv('HERDR_PANE_ID','another-ville-pane')
+    else:
+        ville.update_ville(cwd,{'telegram':{'enabled':False}} if case == 'telegram_off' else {'team':{'shape':'pipeline'}})
+    monkeypatch.setattr(ap.messages,'repo_root',lambda p:p)
+    value = payload(bridge,kind); value['cwd'] = str(cwd)
+    output = io.StringIO()
+    ap.hook(kind,io.StringIO(json.dumps(value)),out=output,clock=lambda:100,
+            sleep=lambda _:pytest.fail('unowned hook must not wait'))
+    assert output.getvalue() == ''
+    assert not list((bridge.project/ap.DIRECTORY).glob('*.json'))
+    assert not list((cwd/ap.DIRECTORY).glob('*.json'))
+
+
+def test_ville_lookup_skips_foreign_or_broken_inner_ville(bridge, monkeypatch):
+    inner = bridge.project/'nested-ville'
+    ville.write_ville(inner,{'team':{'lead':'other','shape':'lead'},'telegram':{'enabled':True,'approvals':True}})
+    tg.team.save_state(inner,{'agents':{},'lead_pane':'other-pane'})
+    cwd = inner/'src'; cwd.mkdir()
+    monkeypatch.setattr(ap.messages,'repo_root',lambda p:inner)
+    assert ap.resolve_ville(cwd,'lead-pane')[0] == bridge.project
+    assert ap.resolve_ville(cwd,'other-pane')[0] == inner
+    (inner/tg.team.STATE).write_text('{broken')
+    assert ap.resolve_ville(cwd,'lead-pane')[0] == bridge.project
+    assert ap.resolve_ville(cwd,'unrelated-pane') is None
+
+
+@pytest.mark.parametrize('kind',list(ap.EVENTS))
+@pytest.mark.parametrize('stale',['pane','telegram','missing','corrupt'])
+def test_registered_mismatch_is_silent_without_cwd_fallback(bridge,kind,stale):
+    project = bridge.project
+    registered = project/'stale'
+    ville.write_ville(registered,{'team':{'shape':'lead','lead':'other'},'telegram':{'enabled':True}})
+    tg.team.save_state(registered,{'agents':{},'lead_pane':'lead-pane'})
+    ap.leads.register(registered,'lead-pane')
+    if stale == 'pane': tg.team.save_state(registered,{'agents':{},'lead_pane':'different-pane'})
+    elif stale == 'telegram': ville.update_ville(registered,{'telegram':{'enabled':False}})
+    elif stale == 'missing': (registered/'.tomville/ville.toml').unlink()
+    else: ap.leads.registry_path().write_text('{broken')
+    value = payload(bridge,kind)  # cwd has a valid matching ville; stale registry must still win.
+    output = io.StringIO()
+    ap.hook(kind,io.StringIO(json.dumps(value)),out=output,clock=lambda:100,
+            sleep=lambda _:pytest.fail('stale registry must not wait or fall back'))
+    assert output.getvalue() == ''
+    assert not list((project/ap.DIRECTORY).glob('*.json'))
+
+
+def test_worker_registry_entry_cannot_authorize_a_lead_hook(bridge,monkeypatch):
+    ap.leads.register(bridge.project,'worker-pane')
+    monkeypatch.setenv('HERDR_PANE_ID','worker-pane')
+    output = io.StringIO()
+    ap.hook('permission-request',io.StringIO(json.dumps(payload(bridge,'permission-request'))),out=output,
+            sleep=lambda _:pytest.fail('worker must not wait'))
+    assert output.getvalue() == ''
+    assert not list((bridge.project/ap.DIRECTORY).glob('*.json'))

@@ -11,10 +11,9 @@ import sys
 import tempfile
 import time
 
-from tomville.core import messages, team
+from tomville.core import messages, team, leads
 from tomville.core.models import Message
 from tomville.core.questions import question_lines
-
 from tomville.core.locks import file_lock
 from tomville.core.settings import load_settings
 
@@ -62,6 +61,37 @@ def eligible(project, settings, pane):
     state = team.load_state(project)
     return (settings.team == 'lead' and settings.telegram['enabled'] and bool(settings.lead)
             and bool(pane) and pane == state.get('lead_pane'))
+
+
+def resolve_ville(cwd, pane):
+    """Registry first; stale hints never fall through to another ville."""
+    if not pane:
+        return None
+
+    def candidate(project):
+        try:
+            if (project / '.tomville/ville.toml').is_file():
+                settings = load_settings(project)
+                if eligible(project, settings, pane):
+                    return project, settings
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        return None
+
+    try:
+        registered = leads.lookup(pane)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if registered is not None:
+        return candidate(registered)
+    if not cwd.is_absolute():
+        return None
+    cwd = cwd.resolve()
+    for project in (cwd, *cwd.parents):
+        found = candidate(project)
+        if found is not None:
+            return found
+    return None
 
 
 def active(project, settings, data, now):
@@ -134,11 +164,11 @@ def hook(kind, stream=None, *, out=None, clock=time.time, sleep=time.sleep):
         # Subagent hooks inherit the pane too; never answer those as the lead.
         if os.environ.get('HERDR_ENV') != '1' or payload.get('agent_id'):
             return 0
-        project = messages.repo_root(Path(payload['cwd']))
-        settings = load_settings(project)
         pane = os.environ.get('HERDR_PANE_ID')
-        if not eligible(project, settings, pane):
+        found = resolve_ville(Path(payload['cwd']), pane)
+        if found is None:
             return 0
+        project, settings = found
         if kind == 'ask-user-question' and payload.get('tool_name') != 'AskUserQuestion':
             return 0
         if kind in ('permission-request', 'ask-user-question') and not settings.telegram['approvals']:

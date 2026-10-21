@@ -28,7 +28,7 @@ import urllib.request
 
 import tomli_w
 
-from tomville.core import messages, team, telegram_approvals
+from tomville.core import messages, team, telegram_approvals, leads
 from tomville.core.models import Message
 from tomville.core.locks import file_lock
 from tomville.core.settings import load_settings, read_toml
@@ -233,6 +233,7 @@ def setup(project, settings, ask, *, hidden=getpass.getpass, show=print, bot_fac
     ville_id = settings.telegram['id'] or secrets.token_hex(16)
     save_config(ville_id, dict(token=bot.token, chat_id=chat_id, offset=offset, paused=False))
     update_ville(project, {'telegram': dict(enabled=True, bot='@' + me['username'], id=ville_id, approvals=approvals, **{'from': allowed})})
+    leads.register(project, team.load_state(project).get('lead_pane'))
     bot.send(chat_id, 'Paired ✅')
 
 
@@ -614,6 +615,7 @@ def off(project, settings, confirm):
         return False
     stop_tab(project)
     update_ville(project, {'telegram': dict(settings.telegram, enabled=False)})
+    leads.unregister(project)
     if settings.telegram['id']:
         config_path(settings.telegram['id']).unlink(missing_ok=True)
     return True
