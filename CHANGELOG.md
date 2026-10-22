@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 (2026-10-20)
+
+### Fixes
+
+- The Telegram bot no longer stalls after running a while: taps are handled at once, acknowledged first and never lost. Network, herdr and lock waits now have time limits. `tmv telegram status` and `tmv doctor` show a heartbeat (#87, #88).
+- The lead's end-of-turn questions reach Telegram even when the question isn't the last line, with the question lines in bold (#84, #86).
+
 ## 0.2.0 (2026-10-20)
 
 ### 📱 Telegram
