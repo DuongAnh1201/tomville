@@ -272,7 +272,7 @@ Optional, one bot per ville, lead + workers only for now. Design: `tomville-tele
 Agents and Tom read and write Markdown together. Project docs (README, `docs/`, any `.md` in the repo) change through branch and PR; team notes in `notes/` of the main checkout are edited live, with no PR. Issues #94–#97 (#98 is a proposal only).
 
 - [x] `tmv doc list`, `read` (whole file or `--section "A > B"`, with a version tag) and `new`; safety rules (only `.md`, only under `[docs] roots`, nothing outside the project); parser in `core/docs.py` (#94)
-- [ ] `tmv doc edit`: atomic write, 3-way merge, git-style conflicts and resolve (#95)
+- [x] `tmv doc edit`: atomic write, 3-way merge, git-style conflicts and resolve (#95)
 - [ ] Doc change log: who changed what, diff and revert (#96)
 - [ ] Team sees doc changes: watch, office, secretary, Telegram (#97)
 
@@ -286,6 +286,7 @@ Agents and Tom read and write Markdown together. Project docs (README, `docs/`, 
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-28: `tmv doc edit` / `resolve` added (#95): lock + atomic write, 3-way merge, conflict markers.
 - 2026-10-28: M18 Shared Markdown docs added at Tom's approval (#94–#98). `tmv doc list/read/new` and `core/docs.py` done in #94.
 - 2026-10-20: Release 0.2.1 to PyPI: Telegram fixes (bot no longer stalls, taps never lost, heartbeat in status and doctor, end-of-turn questions found anywhere in the message). See CHANGELOG.md.
 - 2026-10-20: Release 0.2.0 to PyPI, highlighting Telegram (M17): optional phone chat per ville, lead permission buttons, diffs, wall board cards, `tmv watch`, fixes (see CHANGELOG.md). M17 live check still pending.

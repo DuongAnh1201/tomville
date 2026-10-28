@@ -134,6 +134,18 @@ def build_parser():
     common_options(doc_new)
     doc_new.add_argument('path')
     doc_new.add_argument('--title', required=True)
+    doc_edit = docs.add_parser('edit', help='edit a doc (or one section) with the new text on stdin; merges concurrent edits')
+    common_options(doc_edit)
+    doc_edit.add_argument('path')
+    doc_edit.add_argument('--section', help='heading path like "Setup > Linux"')
+    doc_edit.add_argument('--base', required=True, metavar='TAG', help='the version tag `doc read` printed')
+    how = doc_edit.add_mutually_exclusive_group()
+    how.add_argument('--replace', action='store_true', help='replace the section (with its heading line) or whole file (default)')
+    how.add_argument('--append', action='store_true', help='add the text at the end of the section or file')
+    doc_edit.add_argument('--merge', action='store_true', help='on overlapping changes, write conflict markers instead of refusing')
+    doc_resolve = docs.add_parser('resolve', help='clear the conflicted mark once no conflict markers are left')
+    common_options(doc_resolve)
+    doc_resolve.add_argument('path')
     return parser
 
 
@@ -156,21 +168,43 @@ def output(value, args, text=None):
 
 def doc_command(args, project, settings):
     from tomville.core import docs
-    from tomville.core.messages import repo_root
 
-    root = repo_root(project)
     roots = settings.docs_roots
     try:
         if args.doc_command == 'list':
+            root, _ = docs.locate(project, args.dir)
             rows = docs.list_docs(root, roots, args.dir)
-            lines = [f"{r['path']}  {r['title']}  ({r['editor'] or '-'}, {r['changed']})  {r['version']}" for r in rows]
+            lines = [f"{r['path']}  {r['title']}  ({r['editor'] or '-'}, {r['changed']})  {r['version']}" + ('  CONFLICTED' if r['conflicted'] else '') for r in rows]
             output(rows, args, '\n'.join(lines) or f'no docs in {args.dir}')
         elif args.doc_command == 'read':
-            result = docs.read_doc(root, roots, args.path, args.section)
-            output(result, args, f"{result['text'].rstrip()}\n\nversion: {result['version']}")
-        else:
-            result = docs.new_doc(root, roots, args.path, args.title)
+            root, state = docs.locate(project, args.path)
+            result = docs.read_doc(root, roots, args.path, args.section, state)
+            note = '\nCONFLICTED: fix the markers, then `tmv doc resolve`' if result['conflicted'] else ''
+            output(result, args, f"{result['text'].rstrip()}\n\nversion: {result['version']}{note}")
+        elif args.doc_command == 'new':
+            root, state = docs.locate(project, args.path)
+            result = docs.new_doc(root, roots, args.path, args.title, state)
             output(result, args, f"created {result['path']} (version {result['version']})")
+        elif args.doc_command == 'edit':
+            root, state = docs.locate(project, args.path)
+            result = docs.edit_doc(root, roots, args.path, args.base, sys.stdin.read(), section=args.section,
+                                   mode='append' if args.append else 'replace', merge=args.merge, state_root=state)
+            text = f"{'merged and ' if result['merged'] else ''}written {result['path']} (version {result['version']})"
+            if result['conflicted']:
+                text = f"{result['path']}: {result['conflicts']} conflict(s) written with markers; fix them, then `tmv doc resolve {result['path']}` (version {result['version']})"
+            elif not result['written']:
+                text = f"{result['path']} already has this content (version {result['version']})"
+            output(result, args, text)
+        else:
+            root, state = docs.locate(project, args.path)
+            result = docs.resolve_doc_conflicts(root, roots, args.path, state)
+            output(result, args, f"resolved {result['path']} (version {result['version']})")
+    except docs.DocConflict as exc:
+        if args.json:
+            output({'error': str(exc), 'conflict': True, 'version': exc.version, 'diff': exc.diff}, args)
+        else:
+            print(f'tomville: {exc}\n{exc.diff}', file=sys.stderr)
+        return 3
     except docs.DocError as exc:
         raise ValueError(str(exc)) from exc
     return 0
