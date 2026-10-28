@@ -28,14 +28,15 @@ import urllib.request
 
 import tomli_w
 
-from tomville.core import messages, team, telegram_approvals, leads
+from tomville.core import docs, messages, team, telegram_approvals, leads
 from tomville.core.models import Message
 from tomville.core.locks import file_lock
 from tomville.core.settings import load_settings, read_toml
 from tomville.core.ville import has_ville, update_ville
 from tomville.core.telegram_text import chunks, diff_messages, parse_diff, pr_diff
 
-COMMANDS = {'status': 'Team status', 'board': 'Task board', 'pending': 'Waiting agents',
+DOC_TRIM = 3000  # characters of a doc sent to the chat
+COMMANDS = {'status': 'Team status', 'board': 'Task board', 'pending': 'Waiting agents', 'doc': 'Read or watch a doc',
             'pause': 'Pause forwarding and pings', 'resume': 'Resume', 'help': 'Help', 'start': 'Help'}
 
 
@@ -346,6 +347,8 @@ class Bridge:
             else:
                 text = '\n'.join(f'{a["name"]}: {a["status"]}' for a in data['agents'] if command != 'pending' or a['status'] == 'blocked')
             return self.say('<b>' + command.title() + '</b>\n' + escape(text or 'None'))
+        if command == 'doc':
+            return self.doc_command(body)
         if self.config.get('paused'):
             return self.say('Paused; use /resume')
         if command:
@@ -370,6 +373,43 @@ class Bridge:
                 self.error('failure reply', reply_error, target)
             return
         self.say('Sent to <b>' + escape(target) + '</b>')
+
+    def doc_command(self, body):
+        """`/doc read PATH [section]`, `/doc watch PATH`, `/doc unwatch PATH`, `/doc watching`."""
+        action, _, rest = body.strip().partition(' ')
+        rest = rest.strip()
+        watched = list(self.config.get('doc_watch', []))
+        usage = '<b>/doc</b> read PATH [section] · watch PATH · unwatch PATH · watching'
+        if action == 'watching':
+            return self.say('<b>Watching</b>\n' + escape('\n'.join(watched) or 'None'))
+        if action not in ('read', 'watch', 'unwatch') or not rest:
+            return self.say(usage)
+        path, _, section = rest.partition(' ')
+        try:
+            root, state = docs.locate(self.project, path)
+            if action == 'read':
+                result = docs.read_doc(root, self.settings.docs_roots, path, section.strip() or None, state, self.settings.docs_keep)
+                text = result['text'].strip()
+                more = len(text) - DOC_TRIM
+                if more > 0:
+                    text = text[:DOC_TRIM] + f'\n… ({more} more characters; ask the lead for the rest)'
+                title = result['path'] + (' › ' + ' › '.join(p.strip() for p in section.split('>')) if section.strip() else '')
+                return self.say(f'<b>{escape(title)}</b> · <code>{result["version"]}</code>\n<pre>{escape(text)}</pre>')
+            real = docs.resolve_doc(root, self.settings.docs_roots, path)
+            rel = docs.relative(root, real)
+        except docs.DocError as exc:
+            return self.say(escape(str(exc)))
+        if action == 'watch':
+            if rel not in watched:
+                watched.append(rel)
+            self.config = change_config(self.settings, doc_watch=watched)
+            return self.say('Watching <b>' + escape(rel) + '</b>')
+        self.config = change_config(self.settings, doc_watch=[w for w in watched if w != rel])
+        return self.say('Stopped watching <b>' + escape(rel) + '</b>')
+
+    def doc_changed(self, event):
+        if event.path in self.config.get('doc_watch', []):
+            return self.say('📄 ' + escape(docs.event_text(dict(who=event.who, path=event.path, op=event.op, section=event.section))))
 
     def blocked(self, agent):
         if self.settings.team == 'lead':
@@ -500,7 +540,7 @@ async def _run(bridge, *, worker_timeout=30):
                 heartbeat('poll', started)
 
     async def notify():
-        from tomville.core.models import AgentStatusChanged, CardChanged
+        from tomville.core.models import AgentStatusChanged, CardChanged, DocChanged
         while True:
             if 'notify' in inflight and not inflight['notify'].done():
                 await asyncio.sleep(.1)
@@ -517,6 +557,8 @@ async def _run(bridge, *, worker_timeout=30):
                                   (a.name in bridge.settings.agents or a.name == bridge.settings.lead)), None)
                     if agent:
                         await work('notify', bridge.blocked, asdict(agent))
+                elif isinstance(event, DocChanged):
+                    await work('notify', bridge.doc_changed, event)
                 elif isinstance(event, CardChanged) and event.old_column is not None and event.card.column in ('review', 'done') and event.old_column != event.card.column:
                     await work('notify', bridge.say, '🤖 tomville: ' + escape(f'{event.card.id} → {event.card.column}: {event.card.title}'))
             except team.ERRORS as exc:

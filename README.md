@@ -220,6 +220,13 @@ Change log:
 
 - Project docs (outside `notes/`) are written in your own worktree, so the PR flow still applies; only `notes/` is shared in the main checkout. `.tomville/doc-*` and `/notes/` are git-ignored.
 
+The team sees doc changes:
+
+- **`tmv watch`** also exits when the doc log gets a new entry or someone saves a file in `notes/` outside tmv (new files too). It prints `Doc notes/plan.md changed by codex1 · section Rollout` (`created by`, `reverted by`, `resolved conflicts in` for the other operations). The lead handles it like a board change. Changes the watching agent made itself are skipped. The first run is a silent baseline; its state is `.tomville/watch-docs.json`.
+- **Office:** the Events panel shows `codex1 edited notes/plan.md › Rollout`, and a 📄 slides from the writer's desk (or the door, for Tom) to the shelf, the review area, and disappears.
+- **Secretary:** its emails get a `Doc changes` part (see AGENTS.md, "The secretary").
+- **Telegram** (when on): `/doc read PATH [section]` sends the text, trimmed to 3000 characters; `/doc watch PATH` pings `📄 codex1 edited notes/plan.md › Rollout` when that doc changes; `/doc unwatch PATH`, `/doc watching`. It reads only what `tmv doc read` may read.
+
 ```toml
 [docs]
 roots = [".", "notes"]

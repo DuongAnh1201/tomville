@@ -8,10 +8,12 @@ import sys
 import tempfile
 import time
 
+from tomville.core import docs
 from tomville.core.commands import run_command
 from tomville.core.ville import github_repo
 
 STATE = Path('.tomville/watch.json')
+DOC_STATE = Path('.tomville/watch-docs.json')
 ISSUE_FIELDS = 'number,title,state,url,author,updatedAt,labels,assignees'
 PR_FIELDS = ('number,title,state,url,author,updatedAt,labels,isCrossRepository,'
              'headRepositoryOwner,reviewRequests,reviews,reviewDecision,statusCheckRollup')
@@ -153,7 +155,34 @@ def changes(previous, current):
     return found
 
 
+def doc_changes(project, settings, *, me=None):
+    """New doc-log entries since the last call, after logging outside saves in notes/.
+
+    The first call (no saved offset) is a silent baseline, like the GitHub one.
+    """
+    path = project / DOC_STATE
+    try:
+        data = json.loads(path.read_text())
+        offset = data['offset'] if isinstance(data.get('offset'), int) and data['offset'] >= 0 else None
+    except (OSError, ValueError, KeyError, TypeError):
+        offset = None
+    names, keep = settings.docs_roots, settings.docs_keep
+    docs.scan_outside(project, names, docs.NOTES, project, keep, baseline=offset is None)
+    if offset is None:
+        found, offset = [], docs.log_size(project)
+    else:
+        found, offset = docs.read_log_since(project, offset)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_text(json.dumps(dict(version=1, offset=offset)))
+    temporary.replace(path)
+    # What the watching agent wrote itself is not news to it.
+    return [dict(entry, kind='doc', action=entry['op']) for entry in found if entry['who'] != me]
+
+
 def format_change(change):
+    if change['kind'] == 'doc':
+        return docs.change_line(change)
     label = 'PR' if change['kind'] == 'pr' else 'Issue'
     flags = []
     if change['outside']:
@@ -179,8 +208,18 @@ def run(project, settings, *, limit=1000, sleep=time.sleep, clock=time.monotonic
     if not repo or len(repo.split('/')) < 2:
         raise ValueError('cannot identify GitHub repository; set board.repo or a GitHub origin')
     previous = load_state(project, repo)
+    from tomville.core.tasks import agent_from_pane
+    me = agent_from_pane()
     while True:
         started = clock()
+        try:
+            found_docs = doc_changes(project, settings, me=me)
+        except (OSError, ValueError, KeyError, TypeError, docs.DocError) as exc:
+            found_docs = []
+            stamp = datetime.now(timezone.utc).isoformat(timespec='seconds')
+            print(f'{stamp} tmv watch: docs: {" ".join(str(exc).split())}', file=sys.stderr, flush=True)
+        if found_docs:
+            return found_docs
         try:
             current = fetch(project, repo, limit)
             found = changes(previous, current)

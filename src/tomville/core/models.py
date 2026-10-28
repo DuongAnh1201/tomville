@@ -129,6 +129,15 @@ class MessageSent:
 
 
 @dataclass(frozen=True)
+class DocChanged:
+    """One line of the doc change log: `who` did `op` to `path` (maybe one section)."""
+    who: str
+    path: str
+    op: str
+    section: str | None = None
+
+
+@dataclass(frozen=True)
 class BoardOffline:
     since: datetime
 
@@ -145,6 +154,7 @@ Event = (
     | CardChanged
     | CardRemoved
     | MessageSent
+    | DocChanged
     | BoardOffline
     | BoardOnline
 )

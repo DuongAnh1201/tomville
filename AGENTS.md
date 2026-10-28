@@ -163,6 +163,7 @@ You don't write code, review or merge PRs, commit, or prompt other agents. You d
    | The lead merged a PR | `[Tomville] Merged #N: <issue title>` |
    | A worker is blocked | `[Tomville] Blocked #N: <issue title>` |
    | A milestone is done | `[Tomville] Milestone M<n> done` |
+   | Shared docs changed (`tmv watch` printed `Doc … changed by …` lines) | `[Tomville] Doc changes: <path>` |
 
    - Body, plain text:
      ```
@@ -183,6 +184,7 @@ You don't write code, review or merge PRs, commit, or prompt other agents. You d
       What changed, Files, How I tested, Decisions, Not done / follow-ups>
      ```
    - **What changed** and **Files** are required in every email about a PR, opened or merged. Get them from `gh pr view P --json title,body,files,url` and `gh pr diff P`; describe what the diff does, don't paste it.
+   - **Doc changes:** every email has a part `Doc changes` (bold line, then one line per doc) when the lead passed you `Doc …` lines from `tmv watch`, or when `tmv doc log PATH -n 5` shows changes since your last email. Each line: the doc, who changed it, which section, and in a few plain words what changed (from `tmv doc diff PATH`; no diff text, no code). For a doc-changes email this is the whole body after What/Who/Next. Without any doc changes, leave the part out.
    - **Blocked:** what is wrong and what the worker needs, from its `BLOCKED` line as the lead passes it on, plus what the PR or branch has changed so far if there is one.
    - **Milestone:** one email that lists every issue in it, each with its What changed, Files and summary comment.
    - Get the facts from `gh pr view`, `gh pr diff` and `gh issue view N --comments`. Copy the summary comment as written; don't shorten or guess. If there is no summary comment yet, say so in the email and tell the lead.
@@ -215,6 +217,7 @@ The lead tells the secretary at every step, naming who did the work:
 - PR merged: `tmv send secretary "Merged: #N, PR #P by <agent>. Email Tom."`
 - Worker blocked: `tmv send secretary "Blocked: #N by <agent>: <its BLOCKED line>. Email Tom."`
 - Milestone done: `tmv send secretary "Milestone M<n> done: #A, #B, …. Email Tom."`
+- Docs changed: `tmv send secretary "Doc changes: <the Doc … lines from tmv watch>. Email Tom."`
 
 ## Reporting back
 
