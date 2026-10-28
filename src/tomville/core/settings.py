@@ -102,6 +102,7 @@ class OfficeSettings(ReaderSettings):
     agents: dict = None  # name -> AgentSpec, in ville order
     telegram: dict = None
     docs_roots: tuple[str, ...] = ('.', 'notes')
+    docs_keep: int = 50
     start_timeout: float = DEFAULT_START_TIMEOUT
 
     def __post_init__(self):
@@ -160,8 +161,11 @@ def settings_from_data(data):
         raise ValueError('name must be text')
     docs = data.get('docs', {})
     roots = docs.get('roots', ['.', 'notes'])
-    if set(docs) - {'roots'} or not isinstance(roots, list) or not roots or any(not isinstance(r, str) or not r for r in roots):
-        raise ValueError('docs allows only roots, a non-empty array of folders')
+    keep = docs.get('keep_versions', 50)
+    if set(docs) - {'roots', 'keep_versions'} or not isinstance(roots, list) or not roots or any(not isinstance(r, str) or not r for r in roots):
+        raise ValueError('docs allows only roots (a non-empty array of folders) and keep_versions')
+    if isinstance(keep, bool) or not isinstance(keep, int) or keep < 1:
+        raise ValueError('docs.keep_versions must be a whole number, at least 1')
     return OfficeSettings(
         name=data.get('name', ''), watch=board.get('watch', False), source=board.get('source', 'github'), repo=board.get('repo', ''),
         check_seconds=float(board.get('check_seconds', 60)), poll_seconds=float(data.get('poll_seconds', 1)),
@@ -169,7 +173,7 @@ def settings_from_data(data):
         layout=data.get('layout', 'auto'), team=team.get('shape', 'lead'), lead=team.get('lead'),
         stages=tuple(team.get('stages', [])), pets=data.get('pets', {}),
         demo=data.get('demo', False), still=data.get('still', False),
-        docs_roots=tuple(roots), telegram=data.get('telegram', {}), agents=agent_specs(data.get('agents', {})), start_timeout=float(data.get('start_timeout', DEFAULT_START_TIMEOUT)),
+        docs_roots=tuple(roots), docs_keep=keep, telegram=data.get('telegram', {}), agents=agent_specs(data.get('agents', {})), start_timeout=float(data.get('start_timeout', DEFAULT_START_TIMEOUT)),
     )
 
 
@@ -217,7 +221,7 @@ def set_key(data, key, value):
 def write_config_value(path, key, text):
     import tomli_w
 
-    known = {'fps', 'style', 'theme', 'layout', 'poll_seconds', 'demo', 'still', 'start_timeout', 'board.source', 'board.repo', 'board.check_seconds', 'board.watch', 'team.shape', 'team.lead', 'team.stages', 'docs.roots'}
+    known = {'fps', 'style', 'theme', 'layout', 'poll_seconds', 'demo', 'still', 'start_timeout', 'board.source', 'board.repo', 'board.check_seconds', 'board.watch', 'team.shape', 'team.lead', 'team.stages', 'docs.roots', 'docs.keep_versions'}
     pet_key = key.startswith('pets.') and len(key.split('.')) == 3 and key.split('.')[-1] in ('sprite', 'color')
     if key not in known and not pet_key:
         raise ValueError(f'unknown setting: {key}')

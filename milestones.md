@@ -273,7 +273,7 @@ Agents and Tom read and write Markdown together. Project docs (README, `docs/`, 
 
 - [x] `tmv doc list`, `read` (whole file or `--section "A > B"`, with a version tag) and `new`; safety rules (only `.md`, only under `[docs] roots`, nothing outside the project); parser in `core/docs.py` (#94)
 - [x] `tmv doc edit`: atomic write, 3-way merge, git-style conflicts and resolve (#95)
-- [ ] Doc change log: who changed what, diff and revert (#96)
+- [x] Doc change log: who changed what, diff and revert (#96)
 - [ ] Team sees doc changes: watch, office, secretary, Telegram (#97)
 
 **Check:** two agents edit different sections of one note at the same time and both edits survive; the same section gives a conflict that `tmv doc resolve` settles; the change log shows both.
@@ -286,6 +286,7 @@ Agents and Tom read and write Markdown together. Project docs (README, `docs/`, 
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-28: Doc change log added (#96): `.tomville/doc-log.jsonl`, `tmv doc log/diff/revert`, outside edits logged as `tom (editor)`, version cap `[docs] keep_versions`.
 - 2026-10-28: `tmv doc edit` / `resolve` added (#95): lock + atomic write, 3-way merge, conflict markers.
 - 2026-10-28: M18 Shared Markdown docs added at Tom's approval (#94–#98). `tmv doc list/read/new` and `core/docs.py` done in #94.
 - 2026-10-20: Release 0.2.1 to PyPI: Telegram fixes (bot no longer stalls, taps never lost, heartbeat in status and doctor, end-of-turn questions found anywhere in the message). See CHANGELOG.md.

@@ -9,8 +9,13 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 
 NOTES = 'notes'
+DEFAULT_KEEP = 50  # versions kept per doc in .tomville/doc-objects/
+OUTSIDE = 'tom (editor)'
+LOG = '.tomville/doc-log.jsonl'
+UNLOGGED_DAYS = 7  # stored reads that never became a logged version expire after this
 HEADING = re.compile(r'^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$')
 FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 SEPARATOR = '>'
@@ -172,7 +177,7 @@ def last_change(root, path):
     return '', when
 
 
-def list_docs(root, names, folder=NOTES):
+def list_docs(root, names, folder=NOTES, state_root=None, keep=DEFAULT_KEEP):
     """Every doc under `folder` (default notes/) with its title, last editor and last change."""
     root = root.resolve()
     start = (root / folder).resolve()
@@ -184,6 +189,8 @@ def list_docs(root, names, folder=NOTES):
         raise DocError(f'{folder}: not a folder')
     if not any(start.is_relative_to(r) or r.is_relative_to(start) for r in doc_roots(root, names)):
         raise DocError(f'{folder}: not under a docs root; change [docs] roots to allow it')
+    state_root = state_root or root
+    logged = log_by_path(state_root)
     docs = []
     for current, dirs, files in os.walk(start):
         dirs[:] = sorted(d for d in dirs if not d.startswith('.') and d not in ('node_modules', '__pycache__'))
@@ -195,27 +202,39 @@ def list_docs(root, names, folder=NOTES):
                 text = real.read_text(encoding='utf-8')
             except (DocError, UnicodeDecodeError, OSError):
                 continue  # unsafe links and unreadable files are not listed
-            editor, when = last_change(root, real)
-            docs.append(dict(path=relative(root, real), title=doc_title(text, real.stem),
-                             editor=editor, changed=when, version=version_tag(text),
-                             conflicted=is_conflicted(root, relative(root, real))))
+            rel = relative(root, real)
+            tag = version_tag(text)
+            if logged.get(rel) and logged[rel][-1]['after'] != tag:  # changed outside tmv: log it now
+                with _Lock(root, rel):
+                    observe(root, state_root, rel, real.read_text(encoding='utf-8'), keep=keep)
+                logged = log_by_path(state_root)
+            if logged.get(rel):
+                editor, when = logged[rel][-1]['who'], logged[rel][-1]['time']
+            else:
+                editor, when = last_change(root, real)
+            docs.append(dict(path=rel, title=doc_title(text, real.stem),
+                             editor=editor, changed=when, version=tag,
+                             conflicted=is_conflicted(root, rel)))
     return docs
 
 
-def read_doc(root, names, path, section=None, state_root=None):
+def read_doc(root, names, path, section=None, state_root=None, keep=DEFAULT_KEEP):
     real = resolve_doc(root, names, path)
-    data = real.read_bytes()
-    try:
-        text = data.decode('utf-8')
-    except UnicodeDecodeError as exc:
-        raise DocError(f'{path}: not UTF-8 text') from exc
+    rel = relative(root, real)
+    state_root = state_root or root
+    with _Lock(root, rel):
+        data = real.read_bytes()
+        try:
+            text = data.decode('utf-8')
+        except UnicodeDecodeError as exc:
+            raise DocError(f'{path}: not UTF-8 text') from exc
+        observe(root, state_root, rel, text, keep=keep, baseline=True)  # also stores it: the base for `edit --base TAG`
     body = section_text(text, section) if section else text
-    store_object(state_root or root, text)  # the base for a later `edit --base TAG`
-    return dict(path=relative(root, real), section=section, version=version_tag(data), text=body,
-                conflicted=is_conflicted(root, relative(root, real)))
+    return dict(path=rel, section=section, version=version_tag(data), text=body,
+                conflicted=is_conflicted(root, rel))
 
 
-def new_doc(root, names, path, title, state_root=None):
+def new_doc(root, names, path, title, state_root=None, who='tom', keep=DEFAULT_KEEP):
     title = title.strip()
     if not title or '\n' in title:
         raise DocError('--title must be one line of text')
@@ -230,6 +249,7 @@ def new_doc(root, names, path, title, state_root=None):
     except FileExistsError as exc:
         raise DocError(f'{path}: already exists') from exc
     store_object(state_root or root, text)
+    record(state_root or root, who, relative(root, real), None, 'new', '', version_tag(text), keep)
     return dict(path=relative(root, real), title=title, version=version_tag(text))
 
 
@@ -334,10 +354,11 @@ def _ends_with_newline(lines):
         lines[-1] += '\n'
 
 
-def apply_edit(base, section, mode, new):
+def apply_edit(base, section, mode, new, exact=False):
     """The new full text: `new` replaces or is appended to a section (or the whole file)."""
     new_lines = _lines(new)
-    _ends_with_newline(new_lines)
+    if not exact:
+        _ends_with_newline(new_lines)
     lines = _lines(base)
     if section is None:
         if mode == 'replace':
@@ -432,7 +453,8 @@ def merge3(base, ours, theirs):
     return ''.join(out + base[pos:]), conflicts
 
 
-def edit_doc(root, names, path, base_tag, new, *, section=None, mode='replace', merge=False, state_root=None):
+def edit_doc(root, names, path, base_tag, new, *, section=None, mode='replace', merge=False, state_root=None,
+             who='tom', keep=DEFAULT_KEEP, op='edit', exact=False, **extra):
     """Edit a doc without ever silently overwriting someone else's change.
 
     `base_tag` is the version the writer read. If the file is still at that version the
@@ -442,7 +464,7 @@ def edit_doc(root, names, path, base_tag, new, *, section=None, mode='replace', 
     """
     if mode not in ('replace', 'append'):
         raise DocError('mode must be replace or append')
-    if not new.strip():
+    if not exact and not new.strip():
         raise DocError('nothing to write: the new text (stdin) is empty')
     real = resolve_doc(root, names, path)
     rel = relative(root, real)
@@ -457,9 +479,10 @@ def edit_doc(root, names, path, base_tag, new, *, section=None, mode='replace', 
         if is_conflicted(root, rel):
             raise DocError(f'{rel} has unresolved conflicts: fix the <<<<<<< / ======= / >>>>>>> parts, '
                            f'then run `tmv doc resolve {rel}`')
+        observe(root, state_root, rel, current, keep=keep)
         store_object(state_root, current)
         base = current if base_tag == current_tag else load_object(state_root, base_tag)
-        ours = apply_edit(base, section, mode, new)
+        ours = apply_edit(base, section, mode, new, exact=exact)
         conflicts = 0
         if base_tag == current_tag:
             result = ours
@@ -473,6 +496,8 @@ def edit_doc(root, names, path, base_tag, new, *, section=None, mode='replace', 
         if result != current:
             write_atomic(real, result)
             store_object(state_root, result)
+            record(state_root, who, rel, section, op, current_tag, version_tag(result), keep,
+                   **({'conflicted': True} if conflicts else {}), **extra)
         if conflicts:
             mark = _mark(root, rel)
             mark.parent.mkdir(parents=True, exist_ok=True)
@@ -481,7 +506,7 @@ def edit_doc(root, names, path, base_tag, new, *, section=None, mode='replace', 
                     conflicted=bool(conflicts), conflicts=conflicts, written=result != current)
 
 
-def resolve_doc_conflicts(root, names, path, state_root=None):
+def resolve_doc_conflicts(root, names, path, state_root=None, who='tom', keep=DEFAULT_KEEP):
     """Clear the conflicted mark once no conflict markers are left in the file."""
     real = resolve_doc(root, names, path)
     rel = relative(root, real)
@@ -493,6 +518,119 @@ def resolve_doc_conflicts(root, names, path, state_root=None):
             lines = [str(n) for n, line in enumerate(text.splitlines(), 1) if MARKERS.match(line)]
             raise DocError(f'{rel} still has conflict markers (lines {", ".join(lines)}); '
                            'edit them out, keeping what you want, then run resolve again')
+        observe(root, state_root or root, rel, text, keep=keep)
         _mark(root, rel).unlink(missing_ok=True)
-        store_object(state_root or root, text)
+        record(state_root or root, who, rel, None, 'resolve', version_tag(text), version_tag(text), keep)
         return dict(path=rel, version=version_tag(text), conflicted=False)
+
+
+# --- change log: who changed what, diff, revert ----------------------------------------------
+
+def log_entries(state_root):
+    path = Path(state_root) / LOG
+    try:
+        lines = path.read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return []
+    entries = []
+    for line in lines:
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue  # a torn or hand-edited line never breaks the log
+        if isinstance(entry, dict) and {'path', 'who', 'time', 'after'} <= set(entry):
+            entries.append(entry)
+    return entries
+
+
+def log_by_path(state_root):
+    grouped = {}
+    for entry in log_entries(state_root):
+        grouped.setdefault(entry['path'], []).append(entry)
+    return grouped
+
+
+def record(state_root, who, rel, section, op, before, after, keep=DEFAULT_KEEP, **extra):
+    """Append one JSON line (one O_APPEND write, so concurrent writers never interleave)."""
+    entry = dict(time=dt.datetime.now().astimezone().isoformat(timespec='seconds'), who=who, path=rel,
+                 section=section, op=op, before=before, after=after, **extra)
+    path = Path(state_root) / LOG
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+    try:
+        os.write(fd, (json.dumps(entry, ensure_ascii=False) + '\n').encode('utf-8'))
+    finally:
+        os.close(fd)
+    prune_objects(state_root, keep)
+    return entry
+
+
+def observe(root, state_root, rel, text, *, keep=DEFAULT_KEEP, baseline=False):
+    """Call with the doc's lock held. A hash that moved with no log line was an outside edit."""
+    store_object(state_root, text)
+    tag = version_tag(text)
+    entries = log_by_path(state_root).get(rel)
+    if entries and entries[-1]['after'] != tag:
+        record(state_root, OUTSIDE, rel, None, 'edit', entries[-1]['after'], tag, keep)
+    elif not entries and baseline:
+        record(state_root, 'tmv', rel, None, 'seen', '', tag, keep)
+
+
+def prune_objects(state_root, keep=DEFAULT_KEEP):
+    """Keep the last `keep` versions of each doc; stored reads nobody logged expire after a week."""
+    folder = Path(state_root) / '.tomville/doc-objects'
+    if not folder.is_dir():
+        return
+    wanted, logged = set(), set()
+    for entries in log_by_path(state_root).values():
+        tags = list(dict.fromkeys(t for e in entries for t in (e.get('before'), e['after']) if t))
+        logged.update(tags)
+        wanted.update(tags[-keep:])
+    cutoff = time.time() - UNLOGGED_DAYS * 86400
+    for obj in folder.iterdir():
+        if not TAG.fullmatch(obj.name):
+            continue  # temp files of a write in progress
+        try:
+            if obj.name in logged and obj.name not in wanted or obj.name not in logged and obj.stat().st_mtime < cutoff:
+                obj.unlink()
+        except OSError:
+            pass
+
+
+def _observed(root, names, path, state_root, keep):
+    real = resolve_doc(root, names, path)
+    rel = relative(root, real)
+    with _Lock(root, rel):
+        text = real.read_text(encoding='utf-8')
+        observe(root, state_root, rel, text, keep=keep)
+    return rel, text
+
+
+def log_doc(root, names, path, state_root=None, n=20, keep=DEFAULT_KEEP):
+    state_root = state_root or root
+    rel, _ = _observed(root, names, path, state_root, keep)
+    return log_by_path(state_root).get(rel, [])[-n:] if n > 0 else log_by_path(state_root).get(rel, [])
+
+
+def diff_doc(root, names, path, since=None, state_root=None, keep=DEFAULT_KEEP):
+    """Unified diff from a stored version (default: before the latest change) to the file now."""
+    state_root = state_root or root
+    rel, text = _observed(root, names, path, state_root, keep)
+    if since is None:
+        entries = [e for e in log_by_path(state_root).get(rel, []) if e['before'] != e['after']]
+        if not entries:
+            raise DocError(f'{rel}: no history yet; give --since TAG')
+        since = entries[-1]['before']
+    old = load_object(state_root, since) if since else ''
+    return dict(path=rel, since=since, version=version_tag(text),
+                diff=''.join(difflib.unified_diff(_lines(old), _lines(text), f'{rel} @{since or "(none)"}', f'{rel} @{version_tag(text)}')))
+
+
+def revert_doc(root, names, path, to_tag, *, base_tag=None, merge=False, state_root=None, who='tom', keep=DEFAULT_KEEP):
+    """Restore an old version as a new edit: same lock, merge and conflict rules as `edit`, logged."""
+    state_root = state_root or root
+    old = load_object(state_root, to_tag)
+    if base_tag is None:
+        base_tag = version_tag(resolve_doc(root, names, path).read_bytes())
+    return edit_doc(root, names, path, base_tag, old, merge=merge, state_root=state_root, who=who, keep=keep,
+                    op='revert', exact=True, to=to_tag)
