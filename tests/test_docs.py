@@ -325,3 +325,148 @@ def test_project_docs_are_written_in_the_callers_worktree(tmp_path):
     assert docs.locate(work, 'README.md') == (work.resolve(), main_repo.resolve())
     assert docs.locate(work, 'notes/x.md') == (main_repo.resolve(), main_repo.resolve())
     assert docs.locate(work, str(main_repo / 'notes/x.md'))[0] == main_repo.resolve()
+
+
+# --- change log ---------------------------------------------------------------------------
+
+def log(root, **kw):
+    return docs.log_doc(root, ROOTS, 'notes/plan.md', **kw)
+
+
+def test_log_attribution_and_ops(note):
+    root, path, tag = note
+    r1 = edit(root, tag, '## Beta\nb!\n', section='Beta', who='codex1')
+    edit(root, r1['version'], 'tail\n', mode='append')
+    entries = log(root)
+    assert [(e['who'], e['op'], e['section']) for e in entries] == [('codex1', 'edit', 'Beta'), ('tom', 'edit', None)]
+    assert entries[0]['before'] == tag and entries[0]['after'] == r1['version'] == entries[1]['before']
+    assert docs.log_doc(root, ROOTS, 'notes/plan.md', n=1) == entries[1:]
+    new = docs.new_doc(root, ROOTS, 'notes/n.md', 'N', who='claude2')
+    last = docs.log_by_path(root)['notes/n.md'][0]
+    assert (last['op'], last['who'], last['before'], last['after']) == ('new', 'claude2', '', new['version'])
+
+
+def test_outside_edit_is_logged_as_tom_editor(note):
+    root, path, tag = note
+    docs.read_doc(root, ROOTS, 'notes/plan.md')  # first sight: baseline
+    assert [e['op'] for e in log(root)] == ['seen']
+    path.write_text(NOTE + 'by hand\n')
+    (entry,) = log(root)[1:]
+    assert entry['who'] == docs.OUTSIDE and entry['before'] == tag and entry['after'] == docs.version_tag(NOTE + 'by hand\n')
+    assert len(log(root)) == 2  # seen once, not logged again
+    path.write_text(NOTE + 'again\n')
+    edit(root, docs.version_tag(NOTE + 'again\n'), 'x\n', mode='append', who='codex1')
+    assert [e['who'] for e in log(root)][-2:] == [docs.OUTSIDE, 'codex1']
+
+
+def test_list_uses_the_log(note):
+    root, path, tag = note
+    edit(root, tag, '## Beta\nb!\n', section='Beta', who='codex1')
+    row = docs.list_docs(root, ROOTS)[0]
+    assert row['editor'] == 'codex1' and row['changed'] == log(root)[-1]['time']
+    path.write_text(path.read_text() + 'by hand\n')
+    assert docs.list_docs(root, ROOTS)[0]['editor'] == docs.OUTSIDE
+
+
+def test_diff_default_and_since(note):
+    root, path, tag = note
+    r1 = edit(root, tag, '## Beta\nb!\n', section='Beta')
+    edit(root, r1['version'], 'tail\n', mode='append')
+    last = docs.diff_doc(root, ROOTS, 'notes/plan.md')
+    assert '+tail' in last['diff'] and 'b!' not in last['diff'] and last['since'] == r1['version']
+    since = docs.diff_doc(root, ROOTS, 'notes/plan.md', since=tag)['diff']
+    assert '+b!' in since and '-b1' in since and '+tail' in since
+    with pytest.raises(docs.DocError, match='unknown version'):
+        docs.diff_doc(root, ROOTS, 'notes/plan.md', since='abcdefabcdef')
+    (root / 'notes/fresh.md').write_text('# F\n')
+    with pytest.raises(docs.DocError, match='no history'):
+        docs.diff_doc(root, ROOTS, 'notes/fresh.md')
+
+
+def test_revert_restores_and_is_logged(note):
+    root, path, tag = note
+    r1 = edit(root, tag, '## Beta\nb!\n', section='Beta')
+    result = docs.revert_doc(root, ROOTS, 'notes/plan.md', tag, who='claude2')
+    assert path.read_text() == NOTE and result['version'] == tag
+    last = log(root)[-1]
+    assert (last['op'], last['who'], last['to'], last['before'], last['after']) == ('revert', 'claude2', tag, r1['version'], tag)
+    assert not docs.revert_doc(root, ROOTS, 'notes/plan.md', tag)['written']
+    with pytest.raises(docs.DocError, match='unknown version'):
+        docs.revert_doc(root, ROOTS, 'notes/plan.md', 'abcdefabcdef')
+
+
+def test_revert_goes_through_the_conflict_path(note):
+    root, path, tag = note
+    r1 = edit(root, tag, '## Beta\nb!\n', section='Beta')
+    r2 = edit(root, r1['version'], '## Gamma\nG!\n', section='Gamma')
+    # the caller last read r1; Gamma changed since, Beta is reverted: both survive
+    docs.revert_doc(root, ROOTS, 'notes/plan.md', tag, base_tag=r1['version'])
+    text = path.read_text()
+    assert 'b1' in text and 'b!' not in text and 'G!' in text
+    # reverting to a version from before a later change to the same lines: conflict
+    r3 = edit(root, docs.version_tag(text), '## Beta\nnewer\n', section='Beta')
+    with pytest.raises(docs.DocConflict):
+        docs.revert_doc(root, ROOTS, 'notes/plan.md', r1['version'], base_tag=docs.version_tag(text))
+    result = docs.revert_doc(root, ROOTS, 'notes/plan.md', r1['version'], base_tag=docs.version_tag(text), merge=True)
+    assert result['conflicted'] and docs.is_conflicted(root, 'notes/plan.md')
+    assert log(root)[-1]['conflicted'] and log(root)[-1]['op'] == 'revert'
+    with pytest.raises(docs.DocError, match='unresolved'):
+        docs.revert_doc(root, ROOTS, 'notes/plan.md', tag)
+
+
+def test_object_store_keeps_last_versions(note):
+    root, path, tag = note
+    version = tag
+    seen = [tag]
+    for i in range(6):
+        version = edit(root, version, f'## Beta\nv{i}\n', section='Beta', keep=3)['version']
+        seen.append(version)
+    objects = {p.name for p in (root / '.tomville/doc-objects').iterdir()}
+    assert set(seen[-3:]) <= objects and not set(seen[:3]) & objects
+    docs.read_doc(root, ROOTS, 'notes/plan.md')
+    old = root / '.tomville/doc-objects' / seen[-1]
+    os.utime(old, (0, 0))
+    docs.store_object(root, 'never logged\n')
+    stale = root / '.tomville/doc-objects' / docs.version_tag('never logged\n')
+    os.utime(stale, (0, 0))
+    docs.prune_objects(root, 3)
+    assert old.exists() and not stale.exists()  # logged versions are kept by count, unlogged ones expire
+
+
+def test_bad_log_lines_are_skipped(note):
+    root, path, tag = note
+    edit(root, tag, 'x\n', mode='append')
+    with open(root / docs.LOG, 'a') as stream:
+        stream.write('not json\n{"path": 1}\n')
+    assert len(log(root)) == 1
+
+
+def test_cli_log_diff_revert_and_attribution(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv('TOMVILLE_CONFIG', str(tmp_path / 'user.toml'))
+    monkeypatch.setattr('tomville.core.tasks.agent_from_pane', lambda: None)
+    base = ['-C', str(tmp_path), '--json']
+    (tmp_path / 'notes').mkdir()
+    (tmp_path / 'notes/p.md').write_text(NOTE)
+
+    def run(*argv, text=''):
+        monkeypatch.setattr('sys.stdin', __import__('io').StringIO(text))
+        code = main(['doc', *argv, *base])
+        return code, json.loads(capsys.readouterr().out)
+
+    tag = run('read', 'notes/p.md')[1]['version']
+    assert run('edit', 'notes/p.md', '--base', tag, '--append', '--as', 'codex1', text='one\n')[0] == 0
+    monkeypatch.setattr('tomville.core.tasks.agent_from_pane', lambda: 'claude2')
+    assert run('edit', 'notes/p.md', '--base', run('read', 'notes/p.md')[1]['version'], '--append', '--as', 'ignored', text='two\n')[0] == 0
+    code, rows = run('log', 'notes/p.md')
+    assert code == 0 and [r['who'] for r in rows if r['op'] == 'edit'] == ['codex1', 'claude2']
+    assert run('log', 'notes/p.md', '-n', '1')[1][0]['who'] == 'claude2'
+    code, out = run('diff', 'notes/p.md')
+    assert code == 0 and '+two' in out['diff'] and '+one' not in out['diff']
+    code, out = run('revert', 'notes/p.md', tag, '--as', 'tom')
+    assert code == 0 and (tmp_path / 'notes/p.md').read_text() == NOTE
+    assert run('log', 'notes/p.md')[1][-1]['op'] == 'revert'
+    assert run('revert', 'notes/p.md', 'zzzzzzzzzzzz')[0] == 2
+    monkeypatch.undo()
+    (tmp_path / '.tomville').mkdir(exist_ok=True)
+    (tmp_path / '.tomville/ville.toml').write_text('[docs]\nkeep_versions = 0\n')
+    assert run('list')[0] == 2

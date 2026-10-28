@@ -146,6 +146,22 @@ def build_parser():
     doc_resolve = docs.add_parser('resolve', help='clear the conflicted mark once no conflict markers are left')
     common_options(doc_resolve)
     doc_resolve.add_argument('path')
+    doc_log = docs.add_parser('log', help='who changed what, newest last')
+    common_options(doc_log)
+    doc_log.add_argument('path')
+    doc_log.add_argument('-n', type=int, default=20, metavar='N', help='show the last N changes (default 20; 0 = all)')
+    doc_diff = docs.add_parser('diff', help='unified diff from a stored version to the file now')
+    common_options(doc_diff)
+    doc_diff.add_argument('path')
+    doc_diff.add_argument('--since', metavar='TAG', help='default: the version before the latest change')
+    doc_revert = docs.add_parser('revert', help='restore an old version as a new, logged edit')
+    common_options(doc_revert)
+    doc_revert.add_argument('path')
+    doc_revert.add_argument('tag', metavar='TAG')
+    doc_revert.add_argument('--base', metavar='TAG', help='the version you last read (default: the file now)')
+    doc_revert.add_argument('--merge', action='store_true', help='on overlapping changes, write conflict markers instead of refusing')
+    for writer in (doc_new, doc_edit, doc_resolve, doc_revert):
+        writer.add_argument('--as', dest='as_name', metavar='NAME', help='who is writing when no herdr pane tells (default: tom)')
     return parser
 
 
@@ -169,35 +185,55 @@ def output(value, args, text=None):
 def doc_command(args, project, settings):
     from tomville.core import docs
 
-    roots = settings.docs_roots
+    from tomville.core.tasks import agent_from_pane
+
+    roots, keep = settings.docs_roots, settings.docs_keep
+    who = agent_from_pane() or getattr(args, 'as_name', None) or 'tom'
     try:
         if args.doc_command == 'list':
-            root, _ = docs.locate(project, args.dir)
-            rows = docs.list_docs(root, roots, args.dir)
+            root, state = docs.locate(project, args.dir)
+            rows = docs.list_docs(root, roots, args.dir, state, keep)
             lines = [f"{r['path']}  {r['title']}  ({r['editor'] or '-'}, {r['changed']})  {r['version']}" + ('  CONFLICTED' if r['conflicted'] else '') for r in rows]
             output(rows, args, '\n'.join(lines) or f'no docs in {args.dir}')
         elif args.doc_command == 'read':
             root, state = docs.locate(project, args.path)
-            result = docs.read_doc(root, roots, args.path, args.section, state)
+            result = docs.read_doc(root, roots, args.path, args.section, state, keep)
             note = '\nCONFLICTED: fix the markers, then `tmv doc resolve`' if result['conflicted'] else ''
             output(result, args, f"{result['text'].rstrip()}\n\nversion: {result['version']}{note}")
         elif args.doc_command == 'new':
             root, state = docs.locate(project, args.path)
-            result = docs.new_doc(root, roots, args.path, args.title, state)
+            result = docs.new_doc(root, roots, args.path, args.title, state, who, keep)
             output(result, args, f"created {result['path']} (version {result['version']})")
         elif args.doc_command == 'edit':
             root, state = docs.locate(project, args.path)
             result = docs.edit_doc(root, roots, args.path, args.base, sys.stdin.read(), section=args.section,
-                                   mode='append' if args.append else 'replace', merge=args.merge, state_root=state)
+                                   mode='append' if args.append else 'replace', merge=args.merge, state_root=state, who=who, keep=keep)
             text = f"{'merged and ' if result['merged'] else ''}written {result['path']} (version {result['version']})"
             if result['conflicted']:
                 text = f"{result['path']}: {result['conflicts']} conflict(s) written with markers; fix them, then `tmv doc resolve {result['path']}` (version {result['version']})"
             elif not result['written']:
                 text = f"{result['path']} already has this content (version {result['version']})"
             output(result, args, text)
+        elif args.doc_command == 'log':
+            root, state = docs.locate(project, args.path)
+            rows = docs.log_doc(root, roots, args.path, state, args.n, keep)
+            output(rows, args, '\n'.join(
+                f"{r['time']}  {r['who']}  {r['op']}" + (f" \"{r['section']}\"" if r.get('section') else '')
+                + f"  {r['before'] or '-'} → {r['after']}" + ('  CONFLICTED' if r.get('conflicted') else '') for r in rows) or 'no history yet')
+        elif args.doc_command == 'diff':
+            root, state = docs.locate(project, args.path)
+            result = docs.diff_doc(root, roots, args.path, args.since, state, keep)
+            output(result, args, result['diff'].rstrip('\n') or 'no difference')
+        elif args.doc_command == 'revert':
+            root, state = docs.locate(project, args.path)
+            result = docs.revert_doc(root, roots, args.path, args.tag, base_tag=args.base, merge=args.merge, state_root=state, who=who, keep=keep)
+            text = (f"{result['path']}: {result['conflicts']} conflict(s) written with markers; fix them, then `tmv doc resolve {result['path']}`" if result['conflicted']
+                    else f"reverted {result['path']} to {args.tag} (version {result['version']})" if result['written']
+                    else f"{result['path']} is already at {args.tag}")
+            output(result, args, text)
         else:
             root, state = docs.locate(project, args.path)
-            result = docs.resolve_doc_conflicts(root, roots, args.path, state)
+            result = docs.resolve_doc_conflicts(root, roots, args.path, state, who, keep)
             output(result, args, f"resolved {result['path']} (version {result['version']})")
     except docs.DocConflict as exc:
         if args.json:

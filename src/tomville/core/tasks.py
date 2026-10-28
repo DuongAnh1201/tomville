@@ -7,6 +7,19 @@ from tomville.core.commands import run_command
 from tomville.core.events import agent_list
 
 
+def agent_from_pane():
+    """The agent whose herdr pane this is, or None (no pane, or herdr cannot be asked)."""
+    pane = os.environ.get('HERDR_PANE_ID')
+    if pane:
+        try:
+            for agent in asyncio.run(agent_list()):
+                if agent.pane_id == pane:
+                    return agent.name
+        except (OSError, ValueError, RuntimeError):
+            pass
+    return None
+
+
 class Tasks:
     def __init__(self, project, settings):
         if settings.source != 'github':
@@ -23,11 +36,8 @@ class Tasks:
         return run_command(command, self.project)
 
     def current_agent(self):
-        pane = os.environ.get('HERDR_PANE_ID')
-        if pane:
-            for agent in asyncio.run(agent_list()):
-                if agent.pane_id == pane:
-                    return agent.name
+        if name := agent_from_pane():
+            return name
         raise ValueError('cannot identify this agent; use --agent NAME')
 
     def new(self, title, body='', agent=None):

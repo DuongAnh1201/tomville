@@ -211,11 +211,19 @@ Safe edits (nobody silently overwrites anybody):
 - The write takes a lock (`flock` on a file in `.tomville/doc-locks/`), writes a temp file, `fsync`s and `os.replace`s it. The text of every version you read or write is kept by tag in `.tomville/doc-objects/` (also the history for the change log).
 - File unchanged since `TAG`: written. Changed by someone else (an agent, or Tom saving in any editor, which needs no lock): your edit is merged against the new content when the changes touch different lines. Same lines: refused with exit code 3 and the other change shown; read again and redo it.
 - `--merge` writes git-style markers (`<<<<<<< ours` / `=======` / `>>>>>>> theirs`) instead and marks the doc **conflicted**. Every `edit` is refused until the markers are fixed and `tmv doc resolve PATH` passes.
+Change log:
+
+- Every `doc new`, `edit`, `resolve` and `revert` appends a line to `.tomville/doc-log.jsonl`: time, who, path, section, op, version before and after. *Who* is the agent whose herdr pane runs the command (as `tmv task` finds it), else `--as NAME`, else `tom`.
+- A save made outside tmv (Tom's editor) moves the hash with no log line. The next doc command that sees it logs it as `tom (editor)`; the first `doc read` of a doc records a starting `seen` line so later outside edits can be told apart.
+- `tmv doc list` takes last editor and last change from the log (git, then file time, for docs not in it yet).
+- Old versions live in `.tomville/doc-objects/`. The last `[docs] keep_versions` (default 50) versions of each doc are kept; versions that were read but never logged expire after a week.
+
 - Project docs (outside `notes/`) are written in your own worktree, so the PR flow still applies; only `notes/` is shared in the main checkout. `.tomville/doc-*` and `/notes/` are git-ignored.
 
 ```toml
 [docs]
 roots = [".", "notes"]
+keep_versions = 50   # versions of each doc kept for diff and revert
 ```
 
 ## Who talks to whom
@@ -600,8 +608,11 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `doc list [DIR]` | List docs with title, last editor and last change (default `notes/`) | `--json` |
 | `doc read PATH` | Print a doc and its version tag (a short content hash of the whole file) | `--section "A > B"` (that heading down to the next one of the same or higher level), `--json` |
 | `doc new PATH` | Create a doc from a small template; refuses if it exists | `--title TEXT` (required), `--json` |
-| `doc edit PATH` | Edit a doc or one section, new text on stdin. `--base TAG` is the version you read; if the file changed meanwhile, the edit is 3-way merged. Overlapping changes are refused (exit 3, shows the other change). `tmv doc new` and `edit` are the only write paths | `--section "A > B"`, `--base TAG` (required), `--replace` (default; give the section's heading line too) / `--append`, `--merge` (write conflict markers instead of refusing), `--json` |
+| `doc edit PATH` | Edit a doc or one section, new text on stdin. `--base TAG` is the version you read; if the file changed meanwhile, the edit is 3-way merged. Overlapping changes are refused (exit 3, shows the other change). `tmv doc new` and `edit` are the only write paths | `--section "A > B"`, `--base TAG` (required), `--replace` (default; give the section's heading line too) / `--append`, `--merge` (write conflict markers instead of refusing), `--as NAME`, `--json` |
 | `doc resolve PATH` | Clear the conflicted mark once no `<<<<<<<` / `>>>>>>>` lines are left | `--json` |
+| `doc log PATH` | Who changed what: time, who, operation, section, version before → after | `-n N` (last N, default 20; 0 = all), `--json` |
+| `doc diff PATH` | Unified diff from a stored version to the file now | `--since TAG` (default: the version before the latest change), `--json` |
+| `doc revert PATH TAG` | Restore an old version as a **new** edit: same lock, merge and conflict rules as `edit`, logged | `--base TAG`, `--merge`, `--as NAME` |
 | `up` | Build the team in herdr from the ville (see [Start your team](#start-your-team)); with no ville it asks the `new` questions first. Safe to run again | |
 | `down [NAME] [--office \| --agents] [--yes]` | Default/`--office`: close only the office. `NAME`: one owned agent. `--agents`: confirm, then stop all ville agents and the office; pre-existing panes and the caller stay | |
 | `setup launcher KIND` | Write a `~/.local/bin` wrapper that runs the real binary, so herdr can detect it (asks first) | |
