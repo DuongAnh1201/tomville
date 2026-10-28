@@ -120,6 +120,20 @@ def build_parser():
     common_options(listing)
     listing.add_argument('--agent')
     listing.add_argument('--status', choices=('todo', 'doing', 'review', 'done'))
+    doc = commands.add_parser('doc', help='read and create shared Markdown docs')
+    common_options(doc)
+    docs = doc.add_subparsers(dest='doc_command', required=True)
+    doc_list = docs.add_parser('list', help='list docs with title, last editor and last change (default: notes/)')
+    common_options(doc_list)
+    doc_list.add_argument('dir', nargs='?', default='notes', metavar='DIR')
+    doc_read = docs.add_parser('read', help='print a doc and its version tag')
+    common_options(doc_read)
+    doc_read.add_argument('path')
+    doc_read.add_argument('--section', help='heading path like "Setup > Linux"')
+    doc_new = docs.add_parser('new', help='create a doc from a small template')
+    common_options(doc_new)
+    doc_new.add_argument('path')
+    doc_new.add_argument('--title', required=True)
     return parser
 
 
@@ -138,6 +152,28 @@ def output(value, args, text=None):
         print(json.dumps(value, ensure_ascii=False), flush=True)
     elif not args.quiet:
         print(text if text is not None else value, flush=True)
+
+
+def doc_command(args, project, settings):
+    from tomville.core import docs
+    from tomville.core.messages import repo_root
+
+    root = repo_root(project)
+    roots = settings.docs_roots
+    try:
+        if args.doc_command == 'list':
+            rows = docs.list_docs(root, roots, args.dir)
+            lines = [f"{r['path']}  {r['title']}  ({r['editor'] or '-'}, {r['changed']})  {r['version']}" for r in rows]
+            output(rows, args, '\n'.join(lines) or f'no docs in {args.dir}')
+        elif args.doc_command == 'read':
+            result = docs.read_doc(root, roots, args.path, args.section)
+            output(result, args, f"{result['text'].rstrip()}\n\nversion: {result['version']}")
+        else:
+            result = docs.new_doc(root, roots, args.path, args.title)
+            output(result, args, f"created {result['path']} (version {result['version']})")
+    except docs.DocError as exc:
+        raise ValueError(str(exc)) from exc
+    return 0
 
 
 def config_command(args):
@@ -409,6 +445,8 @@ def main(argv=None):
             return int(result['problems'] > 0)
         if args.command in ('up', 'down'):
             return team_command(args, project, settings, args.command)
+        if args.command == 'doc':
+            return doc_command(args, project, settings)
         if args.command == 'task':
             return task_command(args, project, settings)
         if args.command == 'new':

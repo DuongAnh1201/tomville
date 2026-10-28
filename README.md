@@ -195,6 +195,21 @@ Status is `todo`, `doing`, `review`, or `done`; use `-` for no agent. The reader
 checks the file's modified time every `poll_seconds` and keeps the last cards if
 it becomes unreadable. `--board PATH` selects another Markdown file.
 
+## Shared docs
+
+Agents and Tom share Markdown docs. **Project docs** (README, `docs/`, `AGENTS.md`, any `.md` in the repo) change through the normal branch, PR and review. **Team notes** live in `notes/` of the project's main checkout, outside branches; every worktree finds it through `git rev-parse --git-common-dir`, and notes are edited live.
+
+`tmv doc` rules (safety):
+
+- Only `.md` files, only under the folders in `[docs] roots` (default `[".", "notes"]`: the repo and `notes/`), never outside the project, and never through a symlink that points out of it.
+- `tmv doc read PATH --section "Setup > Linux"` picks a heading path; a section ends at the next heading of the same or higher level. `#` lines inside fenced code blocks are not headings. A missing section or a name that matches several headings is an error that lists the choices.
+- Every read prints a version tag for the whole file, which later edit commands will use to detect changes.
+
+```toml
+[docs]
+roots = [".", "notes"]
+```
+
 ## Who talks to whom
 
 herdr shows what each agent is doing, but not who sent a prompt to whom: when the lead runs `herdr agent prompt codex1 "..."`, only the lead gets a reply, and herdr's event stream has no "prompt sent" event or sender field (checked against the herdr 0.9.5 API schema). Tomville records messages itself, in a log both shapes use:
@@ -574,6 +589,9 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `new [NAME]` | Create a new ville for this project: name, team shape, agents (kind, model, place), secretary, pets, board, emoji check, and last "Connect a Telegram chat?" (default no). Saved in `.tomville/ville.toml`. Bare `tomville` offers this when the project has no ville yet | `--yes` (accept defaults), `--claude-settings FILE` (hook file, default `~/.claude/settings.json`) |
 | `telegram setup` / `run` / `status` / `pause` / `resume` / `off` | Optional phone chat for this ville (see [Phone (Telegram)](#phone-telegram)). `off` stops the bot and deletes its token | |
 | `reply TEXT` | Send a reply to Tom's chat. For the lead and the agents in `[telegram] from` | `--diff PR`, `--diff-file FILE` (diff per file in code blocks) |
+| `doc list [DIR]` | List docs with title, last editor and last change (default `notes/`) | `--json` |
+| `doc read PATH` | Print a doc and its version tag (a short content hash of the whole file) | `--section "A > B"` (that heading down to the next one of the same or higher level), `--json` |
+| `doc new PATH` | Create a doc from a small template; refuses if it exists | `--title TEXT` (required), `--json` |
 | `up` | Build the team in herdr from the ville (see [Start your team](#start-your-team)); with no ville it asks the `new` questions first. Safe to run again | |
 | `down [NAME] [--office \| --agents] [--yes]` | Default/`--office`: close only the office. `NAME`: one owned agent. `--agents`: confirm, then stop all ville agents and the office; pre-existing panes and the caller stay | |
 | `setup launcher KIND` | Write a `~/.local/bin` wrapper that runs the real binary, so herdr can detect it (asks first) | |
