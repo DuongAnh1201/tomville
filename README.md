@@ -467,11 +467,11 @@ role = "secretary"
 email = "tom@example.com"
 ```
 
-`tmv new` ends with "Start the team now?". Answering yes starts the saved team immediately; `--yes` saves the defaults without starting agents. With an existing ville, `tmv up` asks no questions and starts agents sequentially, then opens the office. Running it again reuses running agents and the office.
+`tmv new` ends with "Start the team now?". Answering yes starts the saved team immediately; `--yes` saves the defaults without starting agents. With an existing ville, `tmv up` asks no questions and starts agents sequentially, then opens the office. Running it again reuses running agents and the office. Pane workers stack beside the lead: the first splits right from the lead, and each later worker splits down from the previous pane worker.
 
 **Who is the lead.** Run `tmv up` inside an agent's pane and that agent is the lead; no second lead is started. Run it in a plain shell and Tomville starts the lead too, in a new tab.
 
-**If herdr can't detect an agent**, Tomville names the pane, the running process and the last lines, with the known fix: a script launcher in front of the real binary (`tmv setup launcher codex`), a startup prompt such as folder trust (answer it yourself), a CLI that is not installed, or a shell that remembers an old path. `tmv doctor` runs the same checks without starting anything.
+**If herdr can't detect an agent**, Tomville names the pane, the running process and the last lines, with the known fix: a script launcher in front of the real binary (`tmv setup launcher codex`), a startup prompt such as folder trust (answer it yourself), a CLI that is not installed, or a shell that remembers an old path. `tmv doctor` runs the same checks without starting anything. It also reports the installed herdr version and warns outside the tested range. A herdr usage or argument error reports a CLI version mismatch instead of suggesting agent detection fixes.
 
 `tmv down` and `tmv down --office` close only the office tab recorded in `.tomville/team.json`; every agent keeps working. `tmv down NAME` stops one agent owned by `tmv up` and keeps everything else.
 

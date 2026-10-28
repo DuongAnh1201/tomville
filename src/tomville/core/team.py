@@ -14,6 +14,7 @@ import time
 
 from tomville.core.commands import run_command
 from tomville.core import leads
+from tomville.core.herdr_cli import argv, usage_hint
 from tomville.core.settings import DEFAULT_START_TIMEOUT
 
 STATE = Path('.tomville/team.json')
@@ -21,12 +22,12 @@ ERRORS = (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError)
 
 
 def herdr(project, *args, timeout=30):
-    raw = run_command(['herdr', *args], project, timeout=timeout)
+    raw = run_command(argv(*args), project, timeout=timeout)
     if not raw:
         return {}
     data = json.loads(raw)
     if data.get('error'):
-        raise OSError(json.dumps(data['error']))
+        raise OSError('herdr ' + ' '.join(args[:2]) + ': ' + json.dumps(data['error']))
     return data['result']
 
 
@@ -127,7 +128,10 @@ def detection(project, spec, pane=None, error=''):
                 facts.append(str(exc))
     executable = shutil.which(spec.kind)
     text = '\n'.join(facts)
-    if not executable or 'command not found' in text or 'not found in PATH' in text:
+    mismatch = usage_hint(error)
+    if mismatch:
+        fix = mismatch
+    elif not executable or 'command not found' in text or 'not found in PATH' in text:
         fix = f'Install {spec.kind} and add it to PATH; retry tmv up in a fresh pane'
     elif any(word in text.lower() for word in ('trust', 'login', 'sign in', 'agent_not_ready', 'blocked')):
         fix = 'Answer the startup question in that pane, then retry tmv up; Tomville will not answer it'
@@ -155,7 +159,7 @@ def first_prompt(spec, lead, specs, project):
     return f'Read AGENTS.md. Your lead is {lead}. Work in your own worktree when assigned work; use tmv task and tmv send. Wait for the lead’s nudge.'
 
 
-def make_place(project, spec, lead_pane):
+def make_place(project, spec, lead_pane, previous_pane=None):
     if spec.place == 'worktree':
         listing = run_command(['git', 'worktree', 'list', '--porcelain'], project)
         existing = None
@@ -167,7 +171,7 @@ def make_place(project, spec, lead_pane):
     elif spec.place == 'pane':
         if not lead_pane:
             raise ValueError('cannot split a pane before the lead is available')
-        result = herdr(project, 'pane', 'split', lead_pane, '--cwd', str(project), '--no-focus')
+        result = herdr(project, 'pane', 'split', previous_pane or lead_pane, '--direction', 'down' if previous_pane else 'right', '--cwd', str(project), '--no-focus')
     else:  # a lead configured `here` starts in a tab when invoked in a shell
         result = herdr(project, 'tab', 'create', '--cwd', str(project), '--label', spec.name, '--no-focus')
     pane = result.get('root_pane') or result.get('pane')
@@ -206,6 +210,7 @@ def up(project, settings):
         data = read_toml(ville_path(project)).get('team', {})
         update_ville(project, {'team': dict(data, lead=lead)})
     rows = []
+    previous_pane = None
     for name, spec in settings.agents.items():
         pane = None
         try:
@@ -217,6 +222,8 @@ def up(project, settings):
             if not caller and name == lead_spec and lead != name:
                 live = next((a for a in agents if agent_name(a) == lead), live)
             if live:
+                if spec.place == 'pane' and name != lead_spec:
+                    previous_pane = live['pane_id']
                 if not live.get('agent'):
                     pane = live['pane_id']
                     raise OSError('agent not detected')
@@ -244,11 +251,15 @@ def up(project, settings):
                 panes = herdr(project, 'pane', 'list')['panes']
                 found = next((p for p in panes if p['pane_id'] == owned['pane'] and p.get('terminal_id') == owned['terminal']), None)
                 if found:
+                    if spec.place == 'pane':
+                        previous_pane = owned['pane']
                     raise OSError('previous startup is still in this pane; inspect it before retrying')
             if name == lead_spec and not caller:
                 lead = name
-            owned = make_place(project, spec, lead_pane)
+            owned = make_place(project, spec, lead_pane, previous_pane)
             pane = owned['pane']
+            if spec.place == 'pane':
+                previous_pane = pane
             state['agents'][name] = owned
             save_state(project, state)  # retain partial starts even if detection fails
             wait_shell(project, pane, settings.start_timeout)

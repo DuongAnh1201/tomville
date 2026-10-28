@@ -16,6 +16,7 @@ from tomville.core.models import (
 from tomville.core import docs
 from tomville.core.messages import LogFollower, log_path, repo_root
 from tomville.core.settings import ReaderSettings
+from tomville.core.herdr_cli import argv
 
 
 def parse_agents(payload):
@@ -28,7 +29,7 @@ def parse_agents(payload):
 
 
 async def agent_list():
-    process = await asyncio.create_subprocess_exec('herdr', 'agent', 'list', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    process = await asyncio.create_subprocess_exec(*argv('agent', 'list'), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     try:
         stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
         if process.returncode:

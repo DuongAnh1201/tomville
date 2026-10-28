@@ -7,6 +7,7 @@ import sys
 import subprocess
 
 from tomville.core.commands import run_command
+from tomville.core.herdr_cli import TESTED_RANGE, tested_version
 from tomville.core.events import EventReader, agent_list
 from tomville.core.settings import config_path
 
@@ -23,6 +24,12 @@ def diagnose(project, settings, config=None):
     add('Terminal', True, f'{size.columns} × {size.lines} cells')
     herdr = shutil.which('herdr')
     add('herdr', bool(herdr), herdr or 'not on PATH', 'Install herdr and add it to PATH', True)
+    if herdr:
+        try:
+            version = run_command(['herdr', '--version'], project)
+            add('herdr version', tested_version(version), f'{version}; tested {TESTED_RANGE}', f'Use herdr {TESTED_RANGE}; check herdr --version')
+        except (OSError, subprocess.SubprocessError) as exc:
+            add('herdr version', False, str(exc), 'Check herdr --version')
     add('Inside herdr', os.environ.get('HERDR_ENV') == '1', 'HERDR_ENV=' + os.environ.get('HERDR_ENV', ''), 'Run tmv in a herdr pane', True)
     agents = []
     try:
