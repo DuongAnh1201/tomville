@@ -581,3 +581,48 @@ def test_lead_registration_on_start_adopt_repeat_and_shutdown(runtime,monkeypatc
     assert leads.lookup('caller') == project
     team.down(project,settings=conf,agents=True,confirm=lambda rows:True)
     assert leads.read() == {}
+
+
+def test_three_pane_agents_stack_and_resume(runtime, monkeypatch):
+    project, calls, agents, *_ = runtime
+    agents.append({'name': 'boss', 'agent': 'claude', 'pane_id': 'lead'})
+    monkeypatch.setenv('HERDR_PANE_ID', 'lead')
+    original = team.run_command
+    def run(args, project, **kw):
+        raw = original(args, project, **kw)
+        if args[1:3] == ['pane', 'split']:
+            data = json.loads(raw)
+            data['result']['pane']['pane_id'] = 'worker-' + str(sum(a[1:3] == ['pane', 'split'] for a, _ in calls))
+            return json.dumps(data)
+        return raw
+    monkeypatch.setattr(team, 'run_command', run)
+    conf = settings(boss=AgentSpec('boss', 'claude', place='here'), **{
+        name: AgentSpec(name, 'codex', place='pane') for name in ('one', 'two', 'three')})
+    rows = team.up(project, conf)
+    assert all(r['result'] == 'started' for r in rows[1:4])
+    splits = [a for a, _ in calls if a[1:3] == ['pane', 'split']]
+    assert [a[3:6] for a in splits] == [
+        ['lead', '--direction', 'right'],
+        ['worker-1', '--direction', 'down'],
+        ['worker-2', '--direction', 'down']]
+    team.up(project, conf)
+    assert len([a for a, _ in calls if a[1:3] == ['pane', 'split']]) == 3
+    conf.agents['four'] = AgentSpec('four', 'codex', place='pane')
+    team.up(project, conf)
+    assert [a for a, _ in calls if a[1:3] == ['pane', 'split']][-1][3:6] == ['worker-3', '--direction', 'down']
+
+
+@pytest.mark.parametrize('error', [
+    (FIXTURES / 'herdr_pane_split_usage.txt').read_text(),
+    "error: unexpected argument '--direction' found\nUsage: herdr pane split <pane_id>",
+    "herdr agent start: error: invalid value 'bad' for '--kind'",
+])
+def test_usage_error_takes_precedence_over_detection(runtime, monkeypatch, error):
+    from tomville.core.herdr_cli import TESTED_RANGE
+    project, *_ = runtime
+    monkeypatch.setattr(team.shutil, 'which', lambda kind: None)
+    fix = team.detection(project, AgentSpec('worker', 'codex'), error=error)['fix']
+    assert fix.startswith('tmv and herdr disagree on `herdr ')
+    assert f'tested {TESTED_RANGE}' in fix
+    assert 'herdr --version' in fix
+    assert 'agent explain' not in fix

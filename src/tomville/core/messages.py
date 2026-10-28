@@ -13,6 +13,8 @@ import os
 import re
 import shlex
 import subprocess
+
+from tomville.core.herdr_cli import argv
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -108,7 +110,7 @@ def send(project: Path, to: str, text: str, wait: bool = False, timeout: int | N
         args.append('--wait')
     if timeout is not None:
         args += ['--timeout', str(timeout)]
-    result = subprocess.run(args, capture_output=True, text=True, **({'timeout': process_timeout} if process_timeout is not None else {}))
+    result = subprocess.run(argv(*args[1:]), capture_output=True, text=True, **({'timeout': process_timeout} if process_timeout is not None else {}))
     if result.returncode:
         raise OSError(result.stderr.strip() or result.stdout.strip() or 'herdr agent prompt failed')
     append(project, Message(datetime.now(timezone.utc), sender if sender is not None else sender_name(), to, text, via))

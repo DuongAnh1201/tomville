@@ -157,6 +157,8 @@ def test_doctor_required_errors_vs_warnings(tmp_path, monkeypatch, capsys):
         return []
     monkeypatch.setattr(doctor, 'agent_list', listing)
     def run(args, project):
+        if args == ['herdr', '--version']:
+            return 'herdr 0.9.5'
         if args[:3] == ['gh', 'auth', 'status']:
             raise OSError('not logged in')
         return '[]'
