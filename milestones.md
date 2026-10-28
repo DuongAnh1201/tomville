@@ -286,6 +286,7 @@ Agents and Tom read and write Markdown together. Project docs (README, `docs/`, 
 
 Notes about changes to the plan, newest first.
 
+- 2026-10-28: Proposal for suggested edits on protected docs written for Tom (`docs/proposals/doc-suggestions.md`, #98). Plan only, no code; nothing is added to M18 until Tom approves.
 - 2026-10-28: `tmv doc edit` / `resolve` added (#95): lock + atomic write, 3-way merge, conflict markers.
 - 2026-10-28: M18 Shared Markdown docs added at Tom's approval (#94–#98). `tmv doc list/read/new` and `core/docs.py` done in #94.
 - 2026-10-20: Release 0.2.1 to PyPI: Telegram fixes (bot no longer stalls, taps never lost, heartbeat in status and doctor, end-of-turn questions found anywhere in the message). See CHANGELOG.md.
