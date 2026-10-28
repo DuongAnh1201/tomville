@@ -218,6 +218,8 @@ Safe edits (nobody silently overwrites anybody):
 roots = [".", "notes"]
 ```
 
+Proposal, not built: [suggested edits on protected docs](docs/proposals/doc-suggestions.md) (waiting for Tom).
+
 ## Who talks to whom
 
 herdr shows what each agent is doing, but not who sent a prompt to whom: when the lead runs `herdr agent prompt codex1 "..."`, only the lead gets a reply, and herdr's event stream has no "prompt sent" event or sender field (checked against the herdr 0.9.5 API schema). Tomville records messages itself, in a log both shapes use:
