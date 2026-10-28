@@ -203,7 +203,15 @@ Agents and Tom share Markdown docs. **Project docs** (README, `docs/`, `AGENTS.m
 
 - Only `.md` files, only under the folders in `[docs] roots` (default `[".", "notes"]`: the repo and `notes/`), never outside the project, and never through a symlink that points out of it.
 - `tmv doc read PATH --section "Setup > Linux"` picks a heading path; a section ends at the next heading of the same or higher level. `#` lines inside fenced code blocks are not headings. A missing section or a name that matches several headings is an error that lists the choices.
-- Every read prints a version tag for the whole file, which later edit commands will use to detect changes.
+- Every read prints a version tag for the whole file; `tmv doc edit --base TAG` says which version you edited from.
+
+Safe edits (nobody silently overwrites anybody):
+
+- `tmv doc read notes/plan.md --section Beta`, then `printf '## Beta\nnew\n' | tmv doc edit notes/plan.md --section Beta --base TAG`. Without `--section` the whole file is edited; `--append` adds to the end of the section or file.
+- The write takes a lock (`flock` on a file in `.tomville/doc-locks/`), writes a temp file, `fsync`s and `os.replace`s it. The text of every version you read or write is kept by tag in `.tomville/doc-objects/` (also the history for the change log).
+- File unchanged since `TAG`: written. Changed by someone else (an agent, or Tom saving in any editor, which needs no lock): your edit is merged against the new content when the changes touch different lines. Same lines: refused with exit code 3 and the other change shown; read again and redo it.
+- `--merge` writes git-style markers (`<<<<<<< ours` / `=======` / `>>>>>>> theirs`) instead and marks the doc **conflicted**. Every `edit` is refused until the markers are fixed and `tmv doc resolve PATH` passes.
+- Project docs (outside `notes/`) are written in your own worktree, so the PR flow still applies; only `notes/` is shared in the main checkout. `.tomville/doc-*` and `/notes/` are git-ignored.
 
 ```toml
 [docs]
@@ -592,6 +600,8 @@ Every option is optional. With none, settings come from `settings.toml`, then bu
 | `doc list [DIR]` | List docs with title, last editor and last change (default `notes/`) | `--json` |
 | `doc read PATH` | Print a doc and its version tag (a short content hash of the whole file) | `--section "A > B"` (that heading down to the next one of the same or higher level), `--json` |
 | `doc new PATH` | Create a doc from a small template; refuses if it exists | `--title TEXT` (required), `--json` |
+| `doc edit PATH` | Edit a doc or one section, new text on stdin. `--base TAG` is the version you read; if the file changed meanwhile, the edit is 3-way merged. Overlapping changes are refused (exit 3, shows the other change). `tmv doc new` and `edit` are the only write paths | `--section "A > B"`, `--base TAG` (required), `--replace` (default; give the section's heading line too) / `--append`, `--merge` (write conflict markers instead of refusing), `--json` |
+| `doc resolve PATH` | Clear the conflicted mark once no `<<<<<<<` / `>>>>>>>` lines are left | `--json` |
 | `up` | Build the team in herdr from the ville (see [Start your team](#start-your-team)); with no ville it asks the `new` questions first. Safe to run again | |
 | `down [NAME] [--office \| --agents] [--yes]` | Default/`--office`: close only the office. `NAME`: one owned agent. `--agents`: confirm, then stop all ville agents and the office; pre-existing panes and the caller stay | |
 | `setup launcher KIND` | Write a `~/.local/bin` wrapper that runs the real binary, so herdr can detect it (asks first) | |

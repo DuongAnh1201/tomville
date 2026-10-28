@@ -7,3 +7,7 @@ dist/
 .tomville/team.json
 .tomville/watch.json
 .tomville/approvals/
+.tomville/doc-objects/
+.tomville/doc-locks/
+.tomville/doc-state/
+/notes/
