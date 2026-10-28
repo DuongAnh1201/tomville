@@ -8,8 +8,9 @@ from pathlib import Path
 from datetime import datetime
 from rich.text import Text
 
+from tomville.core import docs
 from tomville.core.events import EventReader
-from tomville.core.models import AgentAppeared, AgentLeft, AgentStatusChanged, CardChanged, CardRemoved, BoardOffline, BoardOnline, MessageSent, Column, Event
+from tomville.core.models import AgentAppeared, AgentLeft, AgentStatusChanged, CardChanged, CardRemoved, BoardOffline, BoardOnline, DocChanged, MessageSent, Column, Event
 from tomville.core.settings import load_settings
 
 from textual.app import App, ComposeResult
@@ -242,6 +243,8 @@ class TomvilleApp(App):
             message = f"Board offline since {event.since:%H:%M:%S}"
         elif isinstance(event, BoardOnline):
             message = "Board online"
+        elif isinstance(event, DocChanged):
+            message = f"{docs.event_text(dict(who=event.who, path=event.path, op=event.op, section=event.section))}"
         elif isinstance(event, MessageSent):
             m = event.message
             text = re.sub(r"<[^>]+>", "", m.text).strip().replace("\n", " ") if m.via.startswith("telegram") else m.text

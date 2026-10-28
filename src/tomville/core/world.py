@@ -25,6 +25,7 @@ from tomville.core.models import (
     Card,
     CardChanged,
     CardRemoved,
+    DocChanged,
     Message,
     MessageSent,
     Column,
@@ -43,6 +44,7 @@ WANDER_TRIES = 8  # random lounge spots tried before staying put
 TILE = 2  # cells per sprite, as in sprites.py
 BUBBLE_SECONDS = 3.0
 PHONE_STAY = 2.0  # seconds the 📱 envelope stays at the desk
+PAPER_STAY = 2.0  # seconds the 📄 stays on the shelf
 SLEEP_AFTER = 60.0  # seconds idle before a pet sleeps
 BLINK_HZ = 2.0
 BOARD_COLUMN_W = 7  # the wall board headings "Todo   Doing  Review" are 7 cells apart
@@ -190,6 +192,8 @@ class World:
             self.play.on_card(self, event.card, prev)
         elif isinstance(event, CardRemoved):
             self.cards.pop(event.id, None)
+        elif isinstance(event, DocChanged):
+            self._paper(event)
         elif isinstance(event, MessageSent) and event.message.via.startswith("telegram"):
             self._phone_message(event.message)
         elif isinstance(event, MessageSent):
@@ -229,6 +233,18 @@ class World:
             del self.pets[name]
         else:
             self._relayout(snap=False)
+
+    def _paper(self, event: DocChanged) -> None:
+        """A doc was saved: a 📄 slides from the writer's desk (or the door, for Tom) to the shelf."""
+        zone = self.office.zones.get("review") if self.office else None
+        if zone is None:
+            return
+        start = self._front_of_desk(event.who) or self._door_cell()
+        if start is None:
+            return
+        key = f"📄{len(self.parcels)}-{self.time}"
+        self.parcels[key] = Parcel("📄", *start, stay=PAPER_STAY)
+        self.move_parcel(key, (zone.x + zone.w // 2, zone.y))
 
     def _phone_message(self, m: Message) -> None:
         """Tom's phone: 📱 comes in at the door; a reply or an approval shows as a bubble."""

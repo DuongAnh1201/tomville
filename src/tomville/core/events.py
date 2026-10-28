@@ -11,9 +11,10 @@ from tomville.core.board.github import GitHubBoard
 from tomville.core.board.tasks_md import TasksMarkdownBoard
 from tomville.core.models import (
     Agent, AgentAppeared, AgentLeft, AgentStatusChanged, BoardOffline,
-    BoardOnline, CardChanged, CardRemoved, MessageSent, Status,
+    BoardOnline, CardChanged, CardRemoved, DocChanged, MessageSent, Status,
 )
-from tomville.core.messages import LogFollower, log_path
+from tomville.core import docs
+from tomville.core.messages import LogFollower, log_path, repo_root
 from tomville.core.settings import ReaderSettings
 
 
@@ -47,6 +48,8 @@ class EventReader:
         self.cards = {}
         self.offline_since = None
         self.messages = LogFollower(log_path(project))
+        self.doc_root = repo_root(project)
+        self.doc_offset = 0
         self.board_wake = asyncio.Event()
         # Optional: called as snapshot(agents, cards) once each source has read its
         # first state. That first state is not emitted as events (no "appeared" or
@@ -192,8 +195,20 @@ class EventReader:
                 pass
             await asyncio.sleep(self.settings.poll_seconds)
 
+    async def _docs(self, emit):
+        # Doc changes made while the office is open; the log's history is not replayed.
+        self.doc_offset = docs.log_size(self.doc_root)
+        while True:
+            try:
+                entries, self.doc_offset = docs.read_log_since(self.doc_root, self.doc_offset)
+                for entry in entries:
+                    emit(DocChanged(str(entry['who']), str(entry['path']), str(entry['op']), entry.get('section')))
+            except OSError:
+                pass
+            await asyncio.sleep(self.settings.poll_seconds)
+
     async def run(self, emit):
-        tasks = [asyncio.create_task(self._agents(emit)), asyncio.create_task(self._board(emit)), asyncio.create_task(self._messages(emit))]
+        tasks = [asyncio.create_task(self._agents(emit)), asyncio.create_task(self._board(emit)), asyncio.create_task(self._messages(emit)), asyncio.create_task(self._docs(emit))]
         try:
             await asyncio.gather(*tasks)
         finally:

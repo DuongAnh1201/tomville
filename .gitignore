@@ -11,3 +11,4 @@ dist/
 .tomville/doc-locks/
 .tomville/doc-state/
 /notes/
+.tomville/watch-docs.json

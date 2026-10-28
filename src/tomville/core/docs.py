@@ -177,6 +177,20 @@ def last_change(root, path):
     return '', when
 
 
+def _walk_docs(root, names, start):
+    """(real path, text) of every safe, readable .md doc under `start`."""
+    for current, dirs, files in os.walk(start):
+        dirs[:] = sorted(d for d in dirs if not d.startswith('.') and d not in ('node_modules', '__pycache__'))
+        for name in sorted(files):
+            if not name.lower().endswith('.md'):
+                continue
+            try:
+                real = resolve_doc(root, names, Path(current) / name)
+                yield real, real.read_text(encoding='utf-8')
+            except (DocError, UnicodeDecodeError, OSError):
+                continue  # unsafe links and unreadable files are not listed
+
+
 def list_docs(root, names, folder=NOTES, state_root=None, keep=DEFAULT_KEEP):
     """Every doc under `folder` (default notes/) with its title, last editor and last change."""
     root = root.resolve()
@@ -192,29 +206,20 @@ def list_docs(root, names, folder=NOTES, state_root=None, keep=DEFAULT_KEEP):
     state_root = state_root or root
     logged = log_by_path(state_root)
     docs = []
-    for current, dirs, files in os.walk(start):
-        dirs[:] = sorted(d for d in dirs if not d.startswith('.') and d not in ('node_modules', '__pycache__'))
-        for name in sorted(files):
-            if not name.lower().endswith('.md'):
-                continue
-            try:
-                real = resolve_doc(root, names, Path(current) / name)
-                text = real.read_text(encoding='utf-8')
-            except (DocError, UnicodeDecodeError, OSError):
-                continue  # unsafe links and unreadable files are not listed
-            rel = relative(root, real)
-            tag = version_tag(text)
-            if logged.get(rel) and logged[rel][-1]['after'] != tag:  # changed outside tmv: log it now
-                with _Lock(root, rel):
-                    observe(root, state_root, rel, real.read_text(encoding='utf-8'), keep=keep)
-                logged = log_by_path(state_root)
-            if logged.get(rel):
-                editor, when = logged[rel][-1]['who'], logged[rel][-1]['time']
-            else:
-                editor, when = last_change(root, real)
-            docs.append(dict(path=rel, title=doc_title(text, real.stem),
-                             editor=editor, changed=when, version=tag,
-                             conflicted=is_conflicted(root, rel)))
+    for real, text in _walk_docs(root, names, start):
+        rel = relative(root, real)
+        tag = version_tag(text)
+        if logged.get(rel) and logged[rel][-1]['after'] != tag:  # changed outside tmv: log it now
+            with _Lock(root, rel):
+                observe(root, state_root, rel, real.read_text(encoding='utf-8'), keep=keep)
+            logged = log_by_path(state_root)
+        if logged.get(rel):
+            editor, when = logged[rel][-1]['who'], logged[rel][-1]['time']
+        else:
+            editor, when = last_change(root, real)
+        docs.append(dict(path=rel, title=doc_title(text, real.stem),
+                         editor=editor, changed=when, version=tag,
+                         conflicted=is_conflicted(root, rel)))
     return docs
 
 
@@ -634,3 +639,85 @@ def revert_doc(root, names, path, to_tag, *, base_tag=None, merge=False, state_r
         base_tag = version_tag(resolve_doc(root, names, path).read_bytes())
     return edit_doc(root, names, path, base_tag, old, merge=merge, state_root=state_root, who=who, keep=keep,
                     op='revert', exact=True, to=to_tag)
+
+
+# --- noticing changes: the watcher, the office, Telegram ------------------------------------
+
+VERBS = {'new': 'created', 'edit': 'changed', 'revert': 'reverted', 'resolve': 'resolved conflicts in'}
+
+
+def scan_outside(root, names, folder=NOTES, state_root=None, keep=DEFAULT_KEEP, baseline=False):
+    """Log saves made outside tmv in `folder`: moved hashes, and files nobody logged yet.
+
+    With `baseline` (the first scan) unlogged files are only recorded as seen, not as new.
+    """
+    root = root.resolve()
+    state_root = state_root or root
+    start = root / folder
+    if not start.is_dir():
+        return
+    for real, text in _walk_docs(root, names, start):
+        rel = relative(root, real)
+        with _Lock(root, rel):
+            current = real.read_text(encoding='utf-8')
+            known = log_by_path(state_root).get(rel)
+            if known or baseline:
+                observe(root, state_root, rel, current, keep=keep, baseline=True)
+            else:
+                store_object(state_root, current)
+                record(state_root, OUTSIDE, rel, None, 'new', '', version_tag(current), keep)
+
+
+def read_log_since(state_root, offset):
+    """(entries added after byte `offset`, the new offset). A half-written last line waits."""
+    path = Path(state_root) / LOG
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return [], 0
+    if size < offset:  # the log was cleared
+        offset = 0
+    if size == offset:
+        return [], offset
+    with path.open('rb') as stream:
+        stream.seek(offset)
+        data = stream.read()
+    end = data.rfind(b'\n') + 1
+    entries = []
+    for line in data[:end].decode('utf-8', 'replace').splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(entry, dict) and {'path', 'who', 'after', 'op'} <= set(entry) and entry['op'] != 'seen':
+            entries.append(entry)
+    return entries, offset + end
+
+
+def log_size(state_root):
+    try:
+        return (Path(state_root) / LOG).stat().st_size
+    except OSError:
+        return 0
+
+
+def _plain(value):
+    return ' '.join(re.sub(r'[\x00-\x1f\x7f-\x9f]', ' ', str(value)).split())
+
+
+def change_line(entry):
+    """`Doc notes/plan.md changed by codex1 · section Rollout` (one safe line)."""
+    verb = VERBS.get(entry['op'], 'changed')
+    line = f"Doc {entry['path']} {verb} by {entry['who']}"
+    if entry.get('section'):
+        line += f" · section {entry['section']}"
+    return _plain(line)
+
+
+def event_text(entry):
+    """`codex1 edited notes/plan.md › Rollout` for the office Events panel."""
+    verb = {'new': 'created', 'revert': 'reverted', 'resolve': 'resolved'}.get(entry['op'], 'edited')
+    text = f"{entry['who']} {verb} {entry['path']}"
+    if entry.get('section'):
+        text += ' › ' + ' › '.join(part.strip() for part in str(entry['section']).split(SEPARATOR))
+    return _plain(text)
