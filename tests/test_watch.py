@@ -220,7 +220,7 @@ def test_cli_json_text_worktree_and_interval(tmp_path, monkeypatch, capsys):
 
 def test_rules_doctor_interval_and_ignored_cache(tmp_path, monkeypatch):
     rules=ville.rules_text(settings(watch=True))
-    assert 'Lead only: keep `tmv watch` running in the background' in rules
+    assert 'Lead only: with `[board] watch = true`, keep `tmv watch` running in the background' in rules
     assert 'never merge without Tom' in rules and 'restart it' in rules
     assert 'tmv watch' not in ville.rules_text(settings())
     assert 'tmv watch' not in ville.rules_text(settings(source='tasks-md', watch=True))
