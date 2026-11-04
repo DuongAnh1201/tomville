@@ -175,10 +175,10 @@ def test_working_pet_animates():
     assert len(seen) == 2  # both frames of the cat
 
 
-def test_cli_rejects_bad_pets(capsys):
+def test_cli_rejects_bad_pets(tmp_path, capsys):
     for args in (["--pet", "codex1"], ["--pet", "codex1=fox"]):
         with pytest.raises(SystemExit) as exit:
-            main(args)
+            main([*args, '-C', str(tmp_path)])
         assert exit.value.code == 2
     err = capsys.readouterr().err
     assert "AGENT=PET" in err and "unknown pet" in err
