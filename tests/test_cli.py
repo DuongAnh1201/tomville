@@ -74,7 +74,7 @@ def test_status_recordings_and_agent_filter(tmp_path, monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)['offline_since']
 
 
-def test_watch_json_lines_and_interrupt(monkeypatch, capsys):
+def test_watch_json_lines_and_interrupt(tmp_path, monkeypatch, capsys):
     calls = 0
     def sleep(interval):
         nonlocal calls
@@ -83,11 +83,11 @@ def test_watch_json_lines_and_interrupt(monkeypatch, capsys):
         if calls == 2:
             raise KeyboardInterrupt
     monkeypatch.setattr('tomville.cli.time.sleep', sleep)
-    assert main(['status', '--demo', '--json', '--watch', '.01', '--agent', 'codex1']) == 0
+    assert main(['status', '--demo', '--json', '--watch', '.01', '--agent', 'codex1', '-C', str(tmp_path)]) == 0
     snapshots = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert len(snapshots) == 2
     assert all(s['agents'][0]['status'] == 'blocked' for s in snapshots)
-    assert main(['status', '--demo', '--json', '--watch', 'nan']) == 2
+    assert main(['status', '--demo', '--json', '--watch', 'nan', '-C', str(tmp_path)]) == 2
 
 
 def test_task_take_preserves_other_labels_and_is_repeatable(tmp_path, monkeypatch, capsys):
@@ -98,7 +98,7 @@ def test_task_take_preserves_other_labels_and_is_repeatable(tmp_path, monkeypatc
             return json.dumps({'state': 'OPEN', 'labels': [{'name': n} for n in ('status:todo', 'status:doing', 'agent:claude2', 'agent:codex1', 'bug')]})
         return 'updated'
     monkeypatch.setattr(tasks, 'run_command', run)
-    assert main(['task', 'take', '6', '--agent', 'codex1', '--json']) == 0
+    assert main(['task', 'take', '6', '--agent', 'codex1', '--json', '-C', str(tmp_path)]) == 0
     edit = commands[-1]
     assert '--remove-label' in edit and 'status:todo' in edit
     assert 'bug' not in edit
@@ -132,22 +132,22 @@ def test_task_new_move_done_reopen_and_failure(tmp_path, monkeypatch, capsys):
         return 'https://github.test/issues/99'
     monkeypatch.setattr(tasks, 'run_command', run)
     config_path().write_text('[board]\nrepo="owner/project"\n')
-    assert main(['task', 'new', 'A title; literal $HOME', '--agent', 'codex1', '--body', 'one\ntwo', '--json']) == 0
+    assert main(['task', 'new', 'A title; literal $HOME', '--agent', 'codex1', '--body', 'one\ntwo', '--json', '-C', str(tmp_path)]) == 0
     assert commands[-1][-2:] == ['--repo', 'owner/project']
     assert 'status:todo,agent:codex1' in commands[-1]
     assert 'one\ntwo' in commands[-1]
-    assert main(['task', 'move', '99', 'done']) == 0
+    assert main(['task', 'move', '99', 'done', '-C', str(tmp_path)]) == 0
     assert 'close' in commands[-1]
     state = 'CLOSED'
-    assert main(['task', 'move', '99', 'doing']) == 0
+    assert main(['task', 'move', '99', 'doing', '-C', str(tmp_path)]) == 0
     assert 'reopen' in commands[-1]
     def fail(*args):
         raise OSError('offline')
     monkeypatch.setattr(tasks, 'run_command', fail)
     capsys.readouterr()
-    assert main(['task', 'take', '99', '--agent', 'codex1', '--json']) == 1
+    assert main(['task', 'take', '99', '--agent', 'codex1', '--json', '-C', str(tmp_path)]) == 1
     assert json.loads(capsys.readouterr().out)['error'] == 'offline'
-    assert main(['task', 'new', 'Demo', '--demo', '--json']) == 2
+    assert main(['task', 'new', 'Demo', '--demo', '--json', '-C', str(tmp_path)]) == 2
 
 
 def test_doctor_required_errors_vs_warnings(tmp_path, monkeypatch, capsys):
@@ -164,11 +164,11 @@ def test_doctor_required_errors_vs_warnings(tmp_path, monkeypatch, capsys):
         return '[]'
     monkeypatch.setattr(doctor, 'run_command', run)
     monkeypatch.setattr('tomville.core.events.EventReader.update_board', lambda self: [])
-    assert main(['doctor', '--json']) == 0
+    assert main(['doctor', '--json', '-C', str(tmp_path)]) == 0
     data = json.loads(capsys.readouterr().out)
     assert data['warnings'] == 2  # login and missing status labels
     monkeypatch.delenv('HERDR_ENV')
-    assert main(['doctor', '--json']) == 1
+    assert main(['doctor', '--json', '-C', str(tmp_path)]) == 1
     assert json.loads(capsys.readouterr().out)['problems'] == 1
 
 
@@ -183,7 +183,7 @@ def test_office_options_and_no_color_reach_app(tmp_path, monkeypatch):
             assert __import__('os').environ.get('NO_COLOR') == '1'
     monkeypatch.setattr(app, 'TomvilleApp', FakeApp)
     monkeypatch.delenv('NO_COLOR', raising=False)
-    assert main(['--fps', '15', '--style', 'ascii', '--theme', 'green-screen', '--pet', 'codex1=dog', '--team', 'pipeline', '--layout', 'portrait', '--demo', '--still', '--no-color']) == 0
+    assert main(['--fps', '15', '--style', 'ascii', '--theme', 'green-screen', '--pet', 'codex1=dog', '--team', 'pipeline', '--layout', 'portrait', '--demo', '--still', '--no-color', '-C', str(tmp_path)]) == 0
     settings = captured['settings']
     assert (settings.fps, settings.style, settings.theme, settings.layout, settings.team, settings.demo, settings.still) == (15, 'ascii', 'green-screen', 'portrait', 'pipeline', True, True)
     assert settings.pets['codex1']['sprite'] == 'dog'
@@ -192,18 +192,18 @@ def test_office_options_and_no_color_reach_app(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('argv', [['--fps', '7'], ['task', 'move', '1', 'invalid'], ['task', 'take', '-1'], ['status', '--watch', '0'], ['--board-check', '9'], ['--pet', 'invalid']])
-def test_usage_exit_codes(argv):
+def test_usage_exit_codes(tmp_path, argv):
     with pytest.raises(SystemExit) as exc:
-        main(argv)
+        main([*argv, '-C', str(tmp_path)])
     assert exc.value.code == 2
 
 
-def test_task_list_filters_and_runtime_response(monkeypatch, capsys):
-    assert main(['task', 'list', '--demo', '--agent', 'codex1', '--status', 'doing', '--json']) == 0
+def test_task_list_filters_and_runtime_response(tmp_path, monkeypatch, capsys):
+    assert main(['task', 'list', '--demo', '--agent', 'codex1', '--status', 'doing', '--json', '-C', str(tmp_path)]) == 0
     cards = json.loads(capsys.readouterr().out)
     assert [card['id'] for card in cards] == ['T1']
     monkeypatch.setattr(tasks, 'run_command', lambda *args: 'invalid json')
-    assert main(['task', 'move', '6', 'review', '--json']) == 1
+    assert main(['task', 'move', '6', 'review', '--json', '-C', str(tmp_path)]) == 1
     assert 'invalid GitHub issue response' in json.loads(capsys.readouterr().out)['error']
 
 
@@ -215,7 +215,7 @@ def test_config_path_show_and_no_color_env(tmp_path, monkeypatch, capsys):
     assert main(['config', 'show', '--config', str(path), '--json']) == 0
     assert json.loads(capsys.readouterr().out) == {'fps': 15}
     monkeypatch.setenv('NO_COLOR', '1')
-    assert main(['status', '--demo']) == 0
+    assert main(['status', '--demo', '-C', str(tmp_path)]) == 0
     assert '\x1b[' not in capsys.readouterr().out
 
 
