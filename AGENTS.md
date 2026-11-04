@@ -226,3 +226,14 @@ The lead reads the end of your output. Finish every task with one line:
 - `DONE #N: <PR URL>` (only after the PR is open and the issue comment is posted)
 - `BLOCKED #N: <what is wrong and what you need>`
 - `IDLE: no issues for <you>`
+
+<!-- tomville:start -->
+## Tomville
+
+This project runs as a Tomville team office. The rules for agents:
+
+- To prompt another agent, run `tmv send AGENT "text"`, not `herdr agent prompt`: it logs who sent the message.
+- Lead only: with `[board] watch = true`, keep `tmv watch` running in the background. It polls every `[board] check_seconds` and exits on changes; handle them and restart it.
+- Lead only: team PR → check conflicts, review/test and merge when ready; outside/fork/unverified PR → review and report to Tom via Telegram/email, never merge without Tom’s approval; new issue → label and assign, or ask Tom.
+- Work items are GitHub issues. Use `tmv task new "title"`, `tmv task take N`, `tmv task move N review` and `tmv task list` instead of long `gh` commands.
+<!-- tomville:end -->

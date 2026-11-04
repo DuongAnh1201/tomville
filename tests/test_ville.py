@@ -309,3 +309,13 @@ def test_rules_mention_telegram_only_when_it_is_on(tmp_path):
     assert 'Telegram' not in ville.rules_text(off) and 'tmv reply' not in ville.rules_text(off)
     text = ville.rules_text(on)
     assert '`📱 Tom (Telegram):`' in text and 'tmv reply "text"' in text and 'Agents not in `[telegram] from` never use `tmv reply`' in text
+
+
+def test_rules_skip_a_claude_md_that_imports_agents_md(tmp_path):
+    (tmp_path / 'AGENTS.md').write_text('# Rules\n')
+    (tmp_path / 'CLAUDE.md').write_text('@AGENTS.md\n\n## Notes\n\n- mine\n\n' + ville.rules_text(make_settings()))
+    changed = ville.install_rules(tmp_path, make_settings())
+    assert {p.name for p in changed} == {'AGENTS.md', 'CLAUDE.md'}
+    assert (tmp_path / 'CLAUDE.md').read_text() == '@AGENTS.md\n\n## Notes\n\n- mine\n'
+    assert (tmp_path / 'AGENTS.md').read_text().count(ville.RULES_START) == 1
+    assert ville.install_rules(tmp_path, make_settings()) == []

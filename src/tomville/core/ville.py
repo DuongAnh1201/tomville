@@ -245,7 +245,7 @@ def rules_text(settings) -> str:
     ]
     if settings.source == 'github' and settings.watch:
         lines += [
-            '- Lead only: keep `tmv watch` running in the background at all times. It polls every `[board] check_seconds` and exits on changes; handle them and restart it.',
+            '- Lead only: with `[board] watch = true`, keep `tmv watch` running in the background. It polls every `[board] check_seconds` and exits on changes; handle them and restart it.',
             '- Lead only: team PR → check conflicts, review/test and merge when ready; outside/fork/unverified PR → review and report to Tom via Telegram/email, never merge without Tom’s approval; new issue → label and assign, or ask Tom.',
         ]
     if settings.source == 'github':
@@ -262,15 +262,28 @@ def rules_text(settings) -> str:
     return '\n'.join([RULES_START, *lines, RULES_END, ''])
 
 
+def imports_agents(text: str) -> bool:
+    return any(line.strip() == '@AGENTS.md' for line in text.splitlines())
+
+
 def install_rules(project: Path, settings) -> list[Path]:
     """Add (or refresh) the Tomville rules in CLAUDE.md and AGENTS.md.
 
-    Edits the files that exist; with neither, creates AGENTS.md.
+    Edits the files that exist; with neither, creates AGENTS.md. A CLAUDE.md
+    that imports `@AGENTS.md` already gets the rules, so its block is removed.
     """
-    targets = [p for p in (project / 'CLAUDE.md', project / 'AGENTS.md') if p.exists()] or [project / 'AGENTS.md']
-    block = rules_text(settings)
+    claude, agents = project / 'CLAUDE.md', project / 'AGENTS.md'
+    targets = [p for p in (claude, agents) if p.exists()] or [agents]
     pattern = re.compile(re.escape(RULES_START) + r'.*?' + re.escape(RULES_END) + r'\n?', re.DOTALL)
     changed = []
+    if claude in targets and agents in targets and imports_agents(claude.read_text(encoding='utf-8')):
+        targets.remove(claude)
+        text = claude.read_text(encoding='utf-8')
+        new = re.sub(r'\n*' + pattern.pattern, '\n', text, flags=re.DOTALL) if pattern.search(text) else text
+        if new != text:
+            claude.write_text(new, encoding='utf-8')
+            changed.append(claude)
+    block = rules_text(settings)
     for path in targets:
         text = path.read_text(encoding='utf-8') if path.exists() else ''
         if pattern.search(text):
