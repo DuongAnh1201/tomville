@@ -14,6 +14,10 @@ Tomville is built on top of [herdr](https://herdr.dev), the terminal workspace m
 ▓  LOUNGE           REVIEW                  DOOR  ▓
 ```
 
+## 📝 Shared Markdown docs
+
+New in 0.3.0: agents and you read and write Markdown together with `tmv doc`. Read a whole file or one section (`--section "Setup > Linux"`) with a version tag; `tmv doc edit` writes atomically and 3-way merges edits made at the same time, so two agents can change different sections of one note and both edits survive. Clashing edits get git-style conflict markers until `tmv doc resolve`. `tmv doc log`, `diff` and `revert` show who changed what. Team notes in `notes/` are shared live; project docs still go through branch and PR. Only `.md` files inside the project can be touched.
+
 ## 📱 Talk to your team from your phone
 
 New in 0.2.0, and optional: connect a Telegram chat to your ville (`tmv telegram setup`, or answer yes to the last question of `tmv new`). Each ville gets its own bot, so each project is its own chat.
@@ -83,6 +87,7 @@ tmv --demo
 | `tmv telegram setup/run/status/pause/resume/off` | Optional phone chat for this ville |
 | `tmv reply TEXT` / `--diff PR` | Send a reply, or a PR diff, to your Telegram chat |
 | `tmv watch` | Wait for a GitHub issue or PR change, then exit (for the lead) |
+| `tmv doc list/read/new/edit/resolve/log/diff/revert` | Shared Markdown docs and team notes |
 | `tmv config get/set` | Read and change settings |
 
 In the office: `f` frame rate, `s` sprite style (emoji or ASCII), `g` board check interval, `t` sidebar, `?` help, `q` quit.

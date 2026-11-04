@@ -278,7 +278,7 @@ Agents and Tom read and write Markdown together. Project docs (README, `docs/`, 
 
 **Check:** two agents edit different sections of one note at the same time and both edits survive; the same section gives a conflict that `tmv doc resolve` settles; the change log shows both.
 
-**Done:** ______
+**Done:** 2026-11-03. Check run by the lead in a scratch repo: claude2 (Board) and codex1 (Sprites) edited in parallel from one base and both survived; both editing Board gave a conflict, resolve refused while markers were left and passed after the fix; `tmv doc log` showed claude2, codex1, the conflict and the resolve (#110).
 
 ---
 
@@ -286,11 +286,13 @@ Agents and Tom read and write Markdown together. Project docs (README, `docs/`, 
 
 Notes about changes to the plan, newest first.
 
+- 2026-11-03: Release 0.3.0 to PyPI: M18 shared Markdown docs, pane fix for herdr 0.9.5, rules block in AGENTS.md only, tests isolated from the live ville. 0.2.1 had been merged but never tagged, so its Telegram fixes ship here (#110). M18 done.
+- 2026-11-03: Known issue #109 (future): a ville writes outside the project (worker worktrees beside the repo, shared checkout for pane workers, `~/.tomville`).
 - 2026-10-28: Doc changes reach the team (#97): `tmv watch` exits on them, office Events line and 📄 to the shelf, secretary "Doc changes" part, Telegram `/doc read|watch`. New shared event type `DocChanged` in `models.py`.
 - 2026-10-28: Doc change log added (#96): `.tomville/doc-log.jsonl`, `tmv doc log/diff/revert`, outside edits logged as `tom (editor)`, version cap `[docs] keep_versions`.
 - 2026-10-28: `tmv doc edit` / `resolve` added (#95): lock + atomic write, 3-way merge, conflict markers.
 - 2026-10-28: M18 Shared Markdown docs added at Tom's approval (#94–#98). `tmv doc list/read/new` and `core/docs.py` done in #94.
-- 2026-10-20: Release 0.2.1 to PyPI: Telegram fixes (bot no longer stalls, taps never lost, heartbeat in status and doctor, end-of-turn questions found anywhere in the message). See CHANGELOG.md.
+- 2026-10-20: Release 0.2.1 merged but never tagged or published (shipped in 0.3.0): Telegram fixes (bot no longer stalls, taps never lost, heartbeat in status and doctor, end-of-turn questions found anywhere in the message). See CHANGELOG.md.
 - 2026-10-20: Release 0.2.0 to PyPI, highlighting Telegram (M17): optional phone chat per ville, lead permission buttons, diffs, wall board cards, `tmv watch`, fixes (see CHANGELOG.md). M17 live check still pending.
 - 2026-10-20: M17 Phone (Telegram) added at the end of Part 2, at Tom's request: optional, one bot per ville, lead + workers only; approvals off by default; MFA later (#60).
 - 2026-10-18: Release 0.1.0 to PyPI (`uv tool install tomville`): the office, `tmv new` / `up` / `down`, status, doctor, task, setup. Tested on Ubuntu and macOS in CI; live use so far on Ubuntu in Termux PRoot.

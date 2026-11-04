@@ -1,6 +1,25 @@
 # Changelog
 
-## 0.2.1 (2026-10-20)
+## 0.3.0 (2026-11-03)
+
+### 📝 Shared Markdown docs
+
+- **`tmv doc`**: agents and Tom read and write Markdown together. `list`, `read` (whole file or one section, with a version tag) and `new`; only `.md` files under `[docs] roots`, never outside the project (#94).
+- `tmv doc edit`: lock + atomic write, 3-way merge of edits made at the same time, git-style conflict markers and `tmv doc resolve` (#95).
+- Change log: `tmv doc log`, `diff`, `revert`; edits made outside tmv are logged as `tom (editor)` (#96).
+- The team sees doc changes: `tmv watch` exits on them, the office shows them, the secretary's emails get a "Doc changes" part, and Telegram has `/doc read` and `/doc watch` (#97).
+- Team notes in `notes/` of the main checkout are shared live by every worktree; project docs still go through branch and PR.
+
+### Fixes
+
+- `tmv up` starts pane agents again on herdr 0.9.5 (`pane split` needs `--direction`); later pane agents stack under the first. A herdr usage error now says the tmv and herdr versions don't match, and `tmv doctor` reports the herdr version and warns outside the tested range (#93, #104).
+- `tmv setup` writes the agent rules to `AGENTS.md` only when `CLAUDE.md` imports `@AGENTS.md`, so Claude doesn't read them twice; the watch rule names `[board] watch = true` (#106).
+- Tests no longer read the developer's own `.tomville/ville.toml` (#105).
+- Also includes the 0.2.1 fixes below.
+
+## 0.2.1 (2026-10-20, not published)
+
+Merged but never tagged, so it was not uploaded to PyPI; these fixes ship in 0.3.0.
 
 ### Fixes
 

@@ -2,7 +2,7 @@
 
 2026-10-16 · Tom Nguyen
 
-**Status (2026-10-20):** 0.2.1 is released on PyPI (see [CHANGELOG.md](CHANGELOG.md)). Part 1 milestones M0–M6 are done and M7 is merged. M17 Phone (Telegram) is merged; its live check is pending. See [milestones.md](milestones.md).
+**Status (2026-11-03):** 0.3.0 is released on PyPI (see [CHANGELOG.md](CHANGELOG.md)): shared Markdown docs (`tmv doc`, M18) plus the Telegram fixes first meant for 0.2.1, which was never published. Part 1 milestones M0–M6 are done and M7 is merged. M17 Phone (Telegram) is merged; its live check is pending. M18 Shared Markdown docs is done. See [milestones.md](milestones.md).
 
 ## Summary
 
@@ -179,7 +179,7 @@ repo = ""                # owner/name; empty = the project's git remote
 - Each check is one GitHub API call for issues updated since the last check, sent with the last `ETag`; an unchanged board returns `304` and does not count against GitHub's rate limit.
 - When GitHub can't be reached, the board keeps the last cards and shows `offline since 10:42`; pets keep moving from herdr data.
 - Agents use `tmv task` instead of long `gh` commands: `tmv task new "Fix login test"`, `tmv task take 12` (adds `status:doing` and the agent's own `agent:` label), `tmv task move 12 review`, `tmv task list`. They call `gh` underneath, and the change shows on the next check.
-- `tmv setup` creates the labels in the repo and adds the board rules to `CLAUDE.md` / `AGENTS.md`.
+- `tmv setup` creates the labels in the repo and adds the board rules to `AGENTS.md` (and to `CLAUDE.md` only when it does not already import `@AGENTS.md`, so Claude never reads them twice).
 
 For the offline source, set `[board] source = "tasks-md"` or run `tmv --board tasks-md`.
 The project file uses this table (extra columns are allowed):
@@ -239,7 +239,7 @@ herdr shows what each agent is doing, but not who sent a prompt to whom: when th
 
 | Way | How it works | Reliability |
 | --- | --- | --- |
-| `tmv send` | Agents send work with `tmv send codex1 "Fix the login test"`. Tomville finds the sender from `HERDR_PANE_ID` (herdr sets it in every pane), calls `herdr agent prompt` itself and appends the message to the log | Exact, when agents use it. `tmv setup` adds a short rule to the project's `CLAUDE.md` and `AGENTS.md` telling agents to use it |
+| `tmv send` | Agents send work with `tmv send codex1 "Fix the login test"`. Tomville finds the sender from `HERDR_PANE_ID` (herdr sets it in every pane), calls `herdr agent prompt` itself and appends the message to the log | Exact, when agents use it. `tmv setup` adds a short rule to the project's `AGENTS.md` (and `CLAUDE.md` unless it imports `@AGENTS.md`) telling agents to use it |
 | Claude Code hook | A `PreToolUse` hook on Bash catches any `herdr agent prompt …` Claude runs directly and logs it with the sender's pane | Exact for Claude as sender, even if it forgets `tmv send`. `tmv setup` installs it. Codex: check whether it has an equivalent hook |
 | Timing guess | Sender was `working`, then the target became `working` within a few seconds | Fallback only; shown as `? → codex1` |
 
@@ -552,6 +552,18 @@ uv tool install tomville     # or: pipx install tomville
 ```
 
 Update with `tmv update`; remove with `tmv uninstall`. Settings in `~/.config/tomville/` stay.
+
+### Files outside the project
+
+Most ville state is in the project's ignored `.tomville/`. These are written elsewhere:
+
+| Path | What | When |
+| --- | --- | --- |
+| `~/.config/tomville/` | `settings.toml`, your sprites, `leads.json` (lead pane registry, mode 600), `telegram/<id>.toml` (bot token, mode 600) | Settings, Telegram setup, lead startup |
+| `~/.claude/settings.json` | Five `tmv hook` entries (message log, Telegram questions and approvals). These are **global**: they run in every Claude Code session on the machine and do nothing outside a ville | `tmv new`, `tmv setup hook` |
+| `~/.local/bin/<kind>` | Native Codex launcher (the old file is kept as `.bak`) | `tmv setup launcher codex`, after you confirm |
+
+**Known issue (#109):** worker worktrees are not yet kept inside the project. Agents told to "work in your own worktree" may create them beside the repo (`../<repo>-<agent>`), pane workers share the main checkout, and running `tmv` from your home folder makes `~` a ville (`~/.tomville/`). Tomville never deletes these for you; remove old worktrees with `git worktree remove`.
 
 During the weekend build (phase 1), install straight from GitHub:
 
